@@ -18,12 +18,12 @@ CartGrid3D::type = "coordbase"
 CoordBase::domainsize = minmax
 
 Carpet::domain_from_coordbase = "yes"
-CoordBase::xmin =  -15.0
-CoordBase::ymin =  -15.0
-CoordBase::zmin =  -15.0
-CoordBase::xmax =   15.0
-CoordBase::ymax =   15.0
-CoordBase::zmax =   15.0
+CoordBase::xmin =  -20.0
+CoordBase::ymin =  -20.0
+CoordBase::zmin =  -22.5
+CoordBase::xmax =   20.0
+CoordBase::ymax =   20.0
+CoordBase::zmax =   22.5
 CoordBase::dx = 5
 CoordBase::dy = 5
 CoordBase::dz = 3
@@ -35,6 +35,7 @@ CoordBase::boundary_size_y_upper = 2
 CoordBase::boundary_size_z_upper = 2
 
 Carpet::max_refinement_levels = 2
+CarpetRegrid2::min_distance = 0
 CarpetRegrid2::num_centres = 1
 CarpetRegrid2::num_levels_1 = 2
 CarpetRegrid2::radius_1[1] = 7.5
@@ -48,12 +49,12 @@ methodoflines::ode_method        = "icn"
 hydrobase::timelevels             = 2
 hydrobase::evolution_method       = "GRHydro"
 
-GRHydro::riemann_solver            = "Marquina"
+GRHydro::riemann_solver            = "hlle"
 GRHydro::GRHydro_eos_type           = "Polytype"
 GRHydro::GRHydro_eos_table          = "2D_Polytrope"
-GRHydro::recon_method              = "ppm"
-GRHydro::GRHydro_stencil            = 3
-GRHydro::bound                     = "none"
+GRHydro::recon_method              = "tvd"
+GRHydro::GRHydro_stencil            = 2
+GRHydro::bound                     = "flat"
 GRHydro::tvd_limiter               = "VanLeerMC2"
 GRHydro::rho_abs_min               = 1.e-7
 GRHydro::initial_atmosphere_factor = 0.999
@@ -80,3 +81,12 @@ IOScalar::outScalar_reductions  = "minimum maximum norm1 norm2"
 
 IOHDF5::out_every = 1
 IOHDF5::out_vars  = "hydrobase::rho admbase::alp"
+
+activethorns = carpetioascii
+IOASCII::compact_format  = "yes"
+IOASCII::out1D_every     = 0
+IOASCII::out1D_d         = "no"
+IOASCII::out1D_vars      = "
+ ADMBase::alp
+ HydroBase::rho
+"

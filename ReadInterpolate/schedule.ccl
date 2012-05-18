@@ -2,8 +2,8 @@
 
 # need to schedule late apparently for CartGrid3d to finish setting up the
 # coordinates (I think)
-schedule ReadInterpolate_Read IN CCTK_INITIAL AFTER ADMBase_InitialData AFTER HydroBase_Initial
+schedule ReadInterpolate_Read IN CCTK_INITIAL AFTER ADMBase_InitialData AFTER HydroBase_Initial BEFORE ADMBase_PostInitial BEFORE HydroBase_Prim2ConInitial
 {
   LANG: C
-  OPTIONS: global-late
+  OPTIONS: level
 } "Read in datasets"

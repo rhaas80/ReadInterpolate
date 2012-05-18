@@ -5,6 +5,7 @@ inherits: grid
 USES INCLUDE HEADER: carpet.hh
 
 CCTK_INT reflevelseen TYPE=gf TAGS='Checkpoint="no" Prolongation="none"' "highest refinement level in source data that overlaps this point so far"
+CCTK_INT interpthispoint TYPE=gf TAGS='Checkpoint="no" Prolongation="none"' "fill this point this time around"
 
 CCTK_REAL interp_coords TYPE=gf TAGS='Checkpoint="no" Prolongation="none"'
 {

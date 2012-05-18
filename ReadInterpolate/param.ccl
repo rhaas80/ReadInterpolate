@@ -20,7 +20,12 @@ STRING interpolator_name "Which interpolator should I use"
 STRING interpolator_pars "Parameters for the interpolator"
 {
     ".*" :: "Any string that Util_TableSetFromString() will take"
-} "order=3 boundary_off_centering_tolerance={0.0 0.0 0.0 0.0 0.0 0.0} boundary_extrapolation_tolerance={0.0 0.0 0.0 0.0 0.0 0.0}"
+} "order=3 boundary_off_centering_tolerance={1e-12 1e-12 1e-12 1e-12 1e-12 1e-12} boundary_extrapolation_tolerance={1e-12 1e-12 1e-12 1e-12 1e-12 1e-12}"
+
+REAL epsilon "Tolerance when deciding if a grid point lies within an overlap region"
+{
+ 0:* :: "any positive number, should be similar to AEILocalInterp's tolerance"
+} 1e-12
 
 # The above makes sure that the interpolator doesn't off-centre the
 # interpolation stencil if there are insufficient points to

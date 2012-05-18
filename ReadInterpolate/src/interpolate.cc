@@ -33,7 +33,7 @@ static void DoInterpolate(size_t npoints,
 // set all seen refinement level data to -1 so that the coarsest on triggers
 void ReadInterpolate_ClearRefLevelSeen(const cGH * cctkGH)
 {
-  BEGIN_REFLEVEL_LOOP(cctkGH) {
+  //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
@@ -44,7 +44,54 @@ void ReadInterpolate_ClearRefLevelSeen(const cGH * cctkGH)
 
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
-  } END_REFLEVEL_LOOP;
+  //} END_REFLEVEL_LOOP;
+}
+
+// check that all target points have been set to something
+void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
+{
+  DECLARE_CCTK_PARAMETERS;
+
+  int nunset_points = 0;
+
+  //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
+    int nunset_points_level = 0;
+    BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
+      BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
+
+        DECLARE_CCTK_ARGUMENTS;
+
+        for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
+        {
+          if(reflevelseen[idx] == -1)
+          {
+            nunset_points_level += 1;
+            if(verbosity >= 8)
+            {
+              CCTK_VInfo(CCTK_THORNSTRING, "Point (%g,%g,%g) on target level %d was not set",
+                         x[idx],y[idx],z[idx], Carpet::reflevel);
+            }
+          }
+        }
+
+      } END_LOCAL_COMPONENT_LOOP;
+    } END_LOCAL_MAP_LOOP;
+    if(nunset_points_level > 0 && verbosity > 1)
+    {
+      CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                 "There were %d points that could not be set on target level %d.",
+                 nunset_points_level, Carpet::reflevel);
+    }
+    nunset_points += nunset_points_level;
+  //} END_REFLEVEL_LOOP;
+
+  if(nunset_points > 0)
+  {
+    CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+               "There were %d points that could not be set.",
+               nunset_points);
+    return; // NOTREACHED
+  }
 }
 
 // interpolate a HDF5 patch onto all Carpet patches that overlap
@@ -55,7 +102,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 {
   DECLARE_CCTK_PARAMETERS;
 
-  BEGIN_REFLEVEL_LOOP(cctkGH) {
+  //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
@@ -65,12 +112,12 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 
         // region for which we have enough inner and ghost points to interpolate,
         // assuming the interpolator needs cctk_nghostzones ghosts 
-        CCTK_REAL xmin[3] = {origin[0]+cctk_nghostzones[0]*delta[0],
-                             origin[1]+cctk_nghostzones[1]*delta[1],
-                             origin[2]+cctk_nghostzones[2]*delta[2]};
-        CCTK_REAL xmax[3] = {origin[0]+(lsh[0]-1-cctk_nghostzones[0])*delta[0],
-                             origin[1]+(lsh[1]-1-cctk_nghostzones[1])*delta[1],
-                             origin[2]+(lsh[2]-1-cctk_nghostzones[2])*delta[2]};
+        CCTK_REAL xmin[3] = {origin[0]+(cctk_nghostzones[0]-1)*delta[0],
+                             origin[1]+(cctk_nghostzones[1]-1)*delta[1],
+                             origin[2]+(cctk_nghostzones[2]-1)*delta[2]};
+        CCTK_REAL xmax[3] = {origin[0]+(lsh[0]-cctk_nghostzones[0])*delta[0],
+                             origin[1]+(lsh[1]-cctk_nghostzones[1])*delta[1],
+                             origin[2]+(lsh[2]-cctk_nghostzones[2])*delta[2]};
         CCTK_REAL *xyz[3] = {x,y,z};
         CCTK_REAL overlaplower[3], overlapupper[3];
 
@@ -87,16 +134,19 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 
         minidx = CCTK_GFINDEX3D(cctkGH, 0,0,0);
         maxidx = CCTK_GFINDEX3D(cctkGH, cctk_lsh[0]-1,cctk_lsh[1]-1,cctk_lsh[2]-1);
-        if(verbosity >= 6)
-        {
-          CCTK_VInfo(CCTK_THORNSTRING, "checking for overlap against (%g,%g,%g)-(%g,%g,%g)",
-                     x[minidx],z[minidx],z[minidx], x[maxidx],z[maxidx],z[maxidx]);
-        }
 
         for(int d = 0 ; d < 3 ; d++)
         {
           overlapupper[d] = MIN(xyz[d][maxidx], xmax[d]);
           overlaplower[d] = MAX(xyz[d][minidx], xmin[d]);
+        }
+
+        if(verbosity >= 6)
+        {
+          CCTK_VInfo(CCTK_THORNSTRING, "checking for overlap against (%g,%g,%g)-(%g,%g,%g): (%g,%g,%g)-(%g,%g,%g)",
+                     x[minidx],z[minidx],z[minidx], x[maxidx],z[maxidx],z[maxidx],
+                     overlaplower[0],overlaplower[1],overlaplower[2],
+                     overlapupper[0],overlapupper[1],overlapupper[2]);
         }
 
         // check for overlap and interpolate
@@ -109,13 +159,14 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
           for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
           {
             if(reflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
-               overlaplower[0] <= x[idx] && x[idx] < overlapupper[0] &&
-               overlaplower[1] <= y[idx] && y[idx] < overlapupper[1] &&
-               overlaplower[2] <= z[idx] && z[idx] < overlapupper[2])
+               overlaplower[0]-epsilon <= x[idx] && x[idx]-epsilon <= overlapupper[0] &&
+               overlaplower[1]-epsilon <= y[idx] && y[idx]-epsilon <= overlapupper[1] &&
+               overlaplower[2]-epsilon <= z[idx] && z[idx]-epsilon <= overlapupper[2])
             {
               interp_x[npoints] = x[idx];
               interp_y[npoints] = y[idx];
               interp_z[npoints] = z[idx];
+              interpthispoint[idx] = 1; // record that we need this point
               npoints += 1;
               if(verbosity >= 10 || (verbosity >= 9 && npoints % (1 + npoints / 10) == 0))
               {
@@ -123,6 +174,8 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
                            (int)npoints, x[idx],y[idx],z[idx], reflevel);
               }
             }
+            else
+              interpthispoint[idx] = 0;
           }
 
           if(verbosity >= 5-(npoints>0))
@@ -141,10 +194,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 
           for(int idx = cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2]-1 ; idx >= 0 ; --idx)
           {
-            if(reflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
-               overlaplower[0] <= x[idx] && x[idx] < overlapupper[0] &&
-               overlaplower[1] <= y[idx] && y[idx] < overlapupper[1] &&
-               overlaplower[2] <= z[idx] && z[idx] < overlapupper[2])
+            if(interpthispoint[idx])
             {
               npoints -= 1; // push/pop logic, must be before access
               outvardata[idx] = interp_data[npoints];
@@ -161,7 +211,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
-  } END_REFLEVEL_LOOP;
+  //} END_REFLEVEL_LOOP;
 }
 
 static void DoInterpolate(size_t npoints, 

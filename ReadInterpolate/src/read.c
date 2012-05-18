@@ -342,9 +342,11 @@ static herr_t ParseObject (hid_t from,
       if(verbosity >= 3)
       {
         CCTK_VInfo(CCTK_THORNSTRING, "Dataset '%s' sizes: origin=(%g,%g,%g), "
-                   "delta=(%g,%g,%g), lsh=(%d,%d,%d), map_is_cartesian=%d",
+                   "delta=(%g,%g,%g), lsh=(%d,%d,%d), map_is_cartesian=%d, iteration=%d,"
+                   " component=%d, reflevel=%d",
                    objectname, origin[0],origin[1],origin[2],
-                   delta[0],delta[1],delta[2], lsh[0],lsh[1],lsh[2], map_is_cartesian);
+                   delta[0],delta[1],delta[2], lsh[0],lsh[1],lsh[2], map_is_cartesian,
+                   iteration, component, reflevel);
       }
     }
 
@@ -388,6 +390,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
 
   const char * groups[] = {
     CCTK_THORNSTRING "::reflevelseen",
+    CCTK_THORNSTRING "::interpthispoint",
     CCTK_THORNSTRING "::interp_coords",
   };
 
@@ -452,6 +455,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
 
   // free storage for temp workspace
   {
+    ReadInterpolate_CheckAllPointsSet(cctkGH);
     for(int i = 0 ; i < DIM(groups) ; i++)
     {
       const int timelevels = 0; // number of timelevels for out temp. variables
