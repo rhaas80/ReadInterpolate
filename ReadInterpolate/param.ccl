@@ -1,0 +1,6 @@
+# Parameter definitions for thorn SOPP
+
+STRING files "space separated list of output file"
+{
+  ".+" :: "any valid paths"
+} "input.h5"

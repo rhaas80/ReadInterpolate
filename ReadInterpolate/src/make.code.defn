@@ -1,0 +1,7 @@
+# Main make.code.defn file for thorn SOPP
+
+# Source files in this directory
+SRCS = sopp.c
+
+# Subdirectories containing source files
+SUBDIRS = 

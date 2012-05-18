@@ -1,0 +1,6 @@
+# Schedule definitions for thorn SOPP
+
+schedule SOPP_Run IN CCTK_INITIAL
+{
+  LANG: C
+} "Read in datasets and call PP routine"

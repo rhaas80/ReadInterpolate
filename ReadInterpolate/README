@@ -1,0 +1,9 @@
+Cactus Code Thorn SOPP
+Author(s)    : Roland Haas <rhaas@caltech.edu>
+Maintainer(s): Roland Haas <rhaas@caltech.edu>
+Licence      : GPL
+--------------------------------------------------------------------------
+
+1. Purpose
+
+Very simply thorn to read in datasets and call the pp routine on it.

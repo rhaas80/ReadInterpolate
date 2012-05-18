@@ -1,0 +1,3 @@
+# Configuration definitions for thorn SOPP
+
+REQUIRES HDF5 EOS_Omni GSL
