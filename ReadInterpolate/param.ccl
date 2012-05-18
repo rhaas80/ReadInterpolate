@@ -1,6 +1,40 @@
 # Parameter definitions for thorn SOPP
 
-STRING files "space separated list of output file"
+STRING files "List of basenames of files to read in as initial data (e.g. omit the filename extention here)"
 {
-  ".+" :: "any valid paths"
-} "input.h5"
+  ".+" :: "Space-separated list of initial data filenames (basenames, e.g. excluding the file name extention)"
+  "^$" :: "An empty string for not recovering initial data"
+} ""
+
+STRING only_these_datasets "consider only these datasets for reading"
+{
+  ".+"        :: "any valid Cactus regular expression"
+  "tl=0 rl=6" :: "refinement level 6, time level 0"
+} ".*"
+
+STRING interpolator_name "Which interpolator should I use"
+{
+    ".+" :: "Any nonempty string"
+} "Hermite polynomial interpolation"
+
+STRING interpolator_pars "Parameters for the interpolator"
+{
+    ".*" :: "Any string that Util_TableSetFromString() will take"
+} "order=3 boundary_off_centering_tolerance={0.0 0.0 0.0 0.0 0.0 0.0} boundary_extrapolation_tolerance={0.0 0.0 0.0 0.0 0.0 0.0}"
+
+# The above makes sure that the interpolator doesn't off-centre the
+# interpolation stencil if there are insufficient points to
+# interpolate, which can happen if there are insufficient ghost-zones
+# for the interpolation method used, and can lead to processor-number
+# dependent results.
+
+INT verbosity "how much diagnostic output to produce"
+{
+  0:0 :: "only errors"
+  1:1 :: "warn about suspicous states"
+  2:* :: "more and more detailed debug output"
+} 1
+
+SHARES: IO
+
+USES STRING filereader_ID_dir

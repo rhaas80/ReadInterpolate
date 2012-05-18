@@ -1,6 +1,9 @@
-# Schedule definitions for thorn SOPP
+# Schedule definitions for thorn ReadInterpolate
 
-schedule SOPP_Run IN CCTK_INITIAL
+# need to schedule late apparently for CartGrid3d to finish setting up the
+# coordinates (I think)
+schedule ReadInterpolate_Read IN CCTK_INITIAL AFTER ADMBase_InitialData AFTER HydroBase_Initial
 {
   LANG: C
-} "Read in datasets and call PP routine"
+  OPTIONS: global-late
+} "Read in datasets"

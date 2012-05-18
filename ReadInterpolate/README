@@ -1,4 +1,4 @@
-Cactus Code Thorn SOPP
+Cactus Code Thorn ReadInterpolate
 Author(s)    : Roland Haas <rhaas@caltech.edu>
 Maintainer(s): Roland Haas <rhaas@caltech.edu>
 Licence      : GPL
@@ -6,4 +6,5 @@ Licence      : GPL
 
 1. Purpose
 
-Very simply thorn to read in datasets and call the pp routine on it.
+A FileReader like thorn that uses InterolateLocalUniform to interpolate the
+data read in onto the new grid.

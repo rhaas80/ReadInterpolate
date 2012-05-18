@@ -1,3 +1,5 @@
-# Configuration definitions for thorn SOPP
+# Configuration definitions for thorn ReadInterpolate
 
-REQUIRES HDF5 EOS_Omni GSL
+REQUIRES HDF5 Carpet IOUtil
+
+REQUIRES THORNS: Carpet IOUtil
