@@ -139,7 +139,6 @@ IOASCII::out1D_vars      = "
 
 IOASCII::out2D_every     = 1
 IOASCII::out2D_vars      = "
- ADMBase::alp
  HydroBase::rho
 "
 

@@ -1,6 +1,6 @@
 !DESC "Carpet unigrid, one TOV" 
 # this is a coarsened copy of TOVSolver's test_tov_static file
-ActiveThorns = "time MoL coordbase symbase cartgrid3d ioutil boundary admbase staticconformal spacemask admcoupling coordgauge admmacros hydrobase grhydro grhydro_initdata tovsolver eos_omni admconstraints Constants LocalReduce Carpet CarpetLib CarpetInterp CarpetReduce CarpetIOScalar CarpetIOBasic LoopControl TmunuBase InitBase carpetiohdf5"
+ActiveThorns = "time MoL coordbase symbase cartgrid3d ioutil boundary admbase staticconformal spacemask admcoupling coordgauge admmacros hydrobase grhydro grhydro_initdata tovsolver eos_omni admconstraints Constants LocalReduce Carpet CarpetLib CarpetRegrid2 CarpetInterp CarpetReduce CarpetIOScalar CarpetIOBasic LoopControl TmunuBase InitBase carpetiohdf5"
 
 TmunuBase::stress_energy_storage	=	yes
 TmunuBase::stress_energy_at_RHS		=	yes
@@ -27,14 +27,19 @@ CoordBase::zmax =   15.0
 CoordBase::dx = 5
 CoordBase::dy = 5
 CoordBase::dz = 3
-CoordBase::boundary_size_x_lower = 3
-CoordBase::boundary_size_y_lower = 3
-CoordBase::boundary_size_z_lower = 3
-CoordBase::boundary_size_x_upper = 3
-CoordBase::boundary_size_y_upper = 3
-CoordBase::boundary_size_z_upper = 3
+CoordBase::boundary_size_x_lower = 2
+CoordBase::boundary_size_y_lower = 2
+CoordBase::boundary_size_z_lower = 2
+CoordBase::boundary_size_x_upper = 2
+CoordBase::boundary_size_y_upper = 2
+CoordBase::boundary_size_z_upper = 2
 
-driver::ghost_size   = 3
+Carpet::max_refinement_levels = 2
+CarpetRegrid2::num_centres = 1
+CarpetRegrid2::num_levels_1 = 2
+CarpetRegrid2::radius_1[1] = 7.5
+
+driver::ghost_size   = 2
 
 cactus::cctk_itlast   =       0
 
@@ -63,7 +68,8 @@ tovsolver::TOV_K[0]           = 100.0
 tovsolver::TOV_Combine_Method = "maximum"
 
 Carpet::prolongation_order_space  = 3
-Carpet::prolongation_order_time   = 2
+Carpet::prolongation_order_time   = 0
+Carpet::init_fill_timelevels      = yes
 
 IO::out_dir			= $parfile
 IO::out_fileinfo= "none"
