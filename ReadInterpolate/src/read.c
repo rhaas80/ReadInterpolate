@@ -235,13 +235,28 @@ static herr_t ParseObject (hid_t from,
   // TODO: move into function of its own
   {
     regmatch_t pmatch[8];
+    char * dataset_regex = strdup(only_these_datasets), *scratchptr;
     int matches_regex, is_known_variable;
-    matches_regex = (CCTK_RegexMatch(objectname, only_these_datasets, DIM(pmatch), pmatch));
+
+    assert(dataset_regex);
+
+    matches_regex = 0;
+    for(const char *regex = strtok_r(dataset_regex, ",", &scratchptr) ;
+        regex != NULL ;
+        regex = strtok_r(NULL, ",", &scratchptr))
+    {
+      if(CCTK_RegexMatch(objectname, regex, DIM(pmatch), pmatch))
+      {
+        matches_regex = 1;
+        break;
+      }
+    }
     if(verbosity >= 4)
     {
-      CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s' against regex '%s': %smatch",
+      CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s' against regex(s) '%s': %smatch",
                  objectname, only_these_datasets, matches_regex ? "" : "no ");
     }
+
     is_known_variable = 0;
     for(int i = 0 ; matches_regex && i < DIM(dset_pattern) ; i++)
     {
@@ -280,6 +295,8 @@ static herr_t ParseObject (hid_t from,
       }
     }
     use_dataset = is_known_variable && matches_regex;
+
+    free(dataset_regex);
   }
 
   if(use_dataset)
