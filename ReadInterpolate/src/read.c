@@ -1,6 +1,7 @@
 #include <stdio.h> 
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <assert.h>
 
 // force interface to be 1.6
@@ -31,6 +32,12 @@ struct pulldata
 
 #define METADATA_GROUP "Parameters and Global Attributes"
 #define ALL_PARAMETERS "All Parameters"
+#define MAX_N_REGEX 200 // maximum number of comma separated reggular expression supported
+
+/********************************************************************
+ *********************     Local Data         ***********************
+ ********************************************************************/
+static int regexmatchedsomething[MAX_N_REGEX];
 
 /********************************************************************
  ********************* Other Routine Prototypes *********************
@@ -241,13 +248,17 @@ static herr_t ParseObject (hid_t from,
     assert(dataset_regex);
 
     matches_regex = 0;
-    for(const char *regex = strtok_r(dataset_regex, ",", &scratchptr) ;
+    int iregex = 0; // count which regex we re looking at
+    for(char *regex = strtok_r(dataset_regex, ",", &scratchptr) ;
         regex != NULL ;
-        regex = strtok_r(NULL, ",", &scratchptr))
+        regex = strtok_r(NULL, ",", &scratchptr), iregex += 1)
     {
-      if(CCTK_RegexMatch(objectname, regex, DIM(pmatch), pmatch))
+      // strip white space from beginning and end of pattern
+      for(int i = strlen(regex) - 1 ; i >= 0 && isspace(regex[i]) ; --i) regex[i] = '\0';
+      if(CCTK_RegexMatch(objectname, regex+strspn(regex, " \n\t\v"), DIM(pmatch), pmatch))
       {
         matches_regex = 1;
+        regexmatchedsomething[iregex] = 1; // record that this regular expression matched at least once
         break;
       }
     }
@@ -430,9 +441,11 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
 
   // loop over all input files
   {
-    char *fns_buf = strdup(files);
+    char *fns_buf = strdup(files), *scratchptr;
     assert(fns_buf);
-    for(const char *fn = strtok(fns_buf, " ") ; fn != NULL ; fn = strtok(NULL, " "))
+    for(const char *fn = strtok_r(fns_buf, " ", &scratchptr) ;
+        fn != NULL ;
+        fn = strtok_r(NULL, " ", &scratchptr))
     {
         const CCTK_INT nioprocs = get_nioprocs(cctkGH, fn);
         const CCTK_INT myproc = CCTK_MyProc(cctkGH);
@@ -468,6 +481,37 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
         }
     }
     free(fns_buf);
+  }
+
+  // check each regular expression matched at least once
+  {
+    int allmatched = 1;
+    char * dataset_regex = strdup(only_these_datasets), *scratchptr;
+
+    assert(dataset_regex);
+
+    int iregex = 0;
+    for(const char *regex = strtok_r(dataset_regex, ",", &scratchptr) ;
+        regex != NULL ;
+        regex = strtok_r(NULL, ",", &scratchptr), iregex += 1)
+    {
+      if(!regexmatchedsomething[iregex]) // never matched
+      {
+        allmatched = 0;
+        CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                   "Regular expresion '%s' did not match anything.",
+                   regex);
+      }
+    }
+
+    free(dataset_regex);
+
+    if(!allmatched)
+    {
+      CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                 "Some regular expresion(s) did not match anything.");
+      return; // NOTREACHED
+    }
   }
 
   // free storage for temp workspace
