@@ -57,6 +57,12 @@ static void read_int_attr(hid_t from, const char *attrname, int nelems,
 static void read_real_attr(hid_t from, const char *attrname, int nelems,
                            CCTK_REAL *data);
 
+static int UseThisDataset(hid_t from, const char *objectsname);
+static int ParseDatasetNameTags(const char *objectsname, char *varname, 
+                                int *iteration, int *timelevel, int *map,
+                                int *reflevel, int *component);
+static int MatchDatasetAgainstRegex(const char *objectname);
+
 /*****************************************************************************/
 /*                           macro definitions                               */
 /*****************************************************************************/
@@ -201,6 +207,139 @@ static void read_real_attr(hid_t from, const char *attrname, int nelems, CCTK_RE
   CHECK_ERROR (H5Aclose (attr));
 }
 
+/*****************************************************************************/
+/*             Routines to decide if to read in a dataset                    */
+/*****************************************************************************/
+
+// match against dataset name pattern "thorn::name it=X tl=Y m=Z rl=U c=V"
+static int ParseDatasetNameTags(const char *objectname, char *varname, 
+                                int *iteration, int *timelevel, int *map,
+                                int *reflevel, int *component)
+{
+  DECLARE_CCTK_PARAMETERS;
+
+  int nread, offset = 0;
+  struct {
+    const char * tag;
+    int * val;
+  } tagvals[] = {
+    {" tl=%d%n", timelevel},
+    {" m=%d%n", map},
+    {" rl=%d%n", reflevel},
+    {" c=%d%n", component}
+  };
+  int retval;
+
+  if(sscanf(objectname, "%s it=%d%n", varname, iteration, &nread) == 2)
+  {
+    offset += nread;
+    for(int i = 0 ; i < DIM(tagvals) ; i++)
+    {
+      int didmatch;
+      if((didmatch = sscanf(objectname+offset, tagvals[i].tag, tagvals[i].val, &nread)) == 1)
+        offset += nread;
+      else
+        *tagvals[i].val = 0;
+      if(verbosity >= 5)
+      {
+        CCTK_VInfo(CCTK_THORNSTRING, "Testing dataset name coda '%s' against tag '%s': found %smatch and will use value %d",
+                    objectname+offset-didmatch*nread, tagvals[i].tag, didmatch?"":"no ", *tagvals[i].val);
+      }
+    }
+    retval = (objectname[offset] == '\0'); // was there any leftover stuff we could not identify?
+  }
+  else
+    retval = 0;
+
+  return retval;
+}
+
+// match a string (object name) against a number of regular expressions
+static int MatchDatasetAgainstRegex(const char *objectname)
+{
+  DECLARE_CCTK_PARAMETERS;
+
+  int retval = 0;
+
+  regmatch_t pmatch[8];
+  char * dataset_regex = strdup(only_these_datasets), *scratchptr;
+  assert(dataset_regex);
+
+  int iregex = 0; // count which regex we re looking at
+  for(char *regex = strtok_r(dataset_regex, ",", &scratchptr) ;
+      regex != NULL ;
+      regex = strtok_r(NULL, ",", &scratchptr), iregex += 1)
+  {
+    // strip white space from beginning and end of pattern
+    for(int i = strlen(regex) - 1 ; i >= 0 && isspace(regex[i]) ; --i) regex[i] = '\0';
+    if(CCTK_RegexMatch(objectname, regex+strspn(regex, " \n\t\v"), DIM(pmatch), pmatch))
+    {
+      retval = 1;
+      regexmatchedsomething[iregex] = 1; // record that this regular expression matched at least once
+      break;
+    }
+  }
+  if(verbosity >= 4)
+  {
+    CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s' against regex(s) '%s': %smatch",
+               objectname, only_these_datasets, retval ? "" : "no ");
+  }
+
+  free(dataset_regex);
+
+  return retval;
+}
+
+// check the object name against
+// * any of the known dataset patterns
+// * the user specified given regex
+// * the list of existing Cactus variables
+// TODO: move into function of its own
+static int UseThisDataset(hid_t from, const char *objectname)
+{
+  DECLARE_CCTK_PARAMETERS;
+
+  char varname[1042];
+  int iteration, reflevel, component, timelevel, map;
+
+  int matches_regex, is_known_variable, is_desired_patch;
+  int retval;
+
+  matches_regex = MatchDatasetAgainstRegex(objectname);
+
+  is_known_variable = 0;
+  is_desired_patch = 0;
+  if(ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map, &reflevel, &component))
+  {
+    // skip some reflevels if we already know we won't need them
+    is_desired_patch = (timelevel == 0)               && 
+                       (map == 0)                     &&
+                       (minimum_reflevel <= reflevel) &&
+                       (reflevel <= maximum_reflevel);
+
+    if(CCTK_VarIndex(varname) >= 0)
+    {
+      is_known_variable = 1;
+      if(verbosity >= 4)
+      {
+        CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s': match", objectname);
+      }
+    }
+  }
+  else
+  {
+    if(verbosity >= 1)
+    {
+      CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                 "Objectname '%s' could not be fully parsed.", objectname);
+    }
+  }
+
+  retval = is_known_variable && matches_regex && is_desired_patch;
+
+  return retval;
+}
+
 // check if object is a dataset, then read it in and interpolate onto all
 // overlapping grids
 static herr_t ParseObject (hid_t from,
@@ -209,119 +348,28 @@ static herr_t ParseObject (hid_t from,
 {
   DECLARE_CCTK_PARAMETERS;
 
-  int use_dataset;
-
   char varname[1042];
   int iteration, reflevel, component, timelevel, map, varindex;
   CCTK_INT lsh[3], map_is_cartesian;
   CCTK_REAL delta[DIM(lsh)], origin[DIM(lsh)];
-  CCTK_REAL * vardata = NULL;
-
+  CCTK_REAL * vardata;
 
   if(verbosity >= 3)
     CCTK_VInfo(CCTK_THORNSTRING, "Checking out dataset '%s'", objectname);
 
-  // check the object name against
-  // * any of the known dataset patterns
-  // * the user specified given regex
-  // * the list of existing Cactus variables
-  // TODO: move into function of its own
-  {
-    regmatch_t pmatch[8];
-    char * dataset_regex = strdup(only_these_datasets), *scratchptr;
-    int matches_regex, is_known_variable, is_desired_patch;
-
-    assert(dataset_regex);
-
-    matches_regex = 0;
-    int iregex = 0; // count which regex we re looking at
-    for(char *regex = strtok_r(dataset_regex, ",", &scratchptr) ;
-        regex != NULL ;
-        regex = strtok_r(NULL, ",", &scratchptr), iregex += 1)
-    {
-      // strip white space from beginning and end of pattern
-      for(int i = strlen(regex) - 1 ; i >= 0 && isspace(regex[i]) ; --i) regex[i] = '\0';
-      if(CCTK_RegexMatch(objectname, regex+strspn(regex, " \n\t\v"), DIM(pmatch), pmatch))
-      {
-        matches_regex = 1;
-        regexmatchedsomething[iregex] = 1; // record that this regular expression matched at least once
-        break;
-      }
-    }
-    if(verbosity >= 4)
-    {
-      CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s' against regex(s) '%s': %smatch",
-                 objectname, only_these_datasets, matches_regex ? "" : "no ");
-    }
-
-    is_known_variable = 0;
-    is_desired_patch = 0;
-    // match against dataset name pattern "thorn::name it=X tl=Y m=Z rl=U c=V"
-    {
-      int nread, offset = 0;
-      struct {
-        const char * tag;
-        int * val;
-      } tagvals[] = {
-        {" tl=%d%n", &timelevel},
-        {" m=%d%n", &map},
-        {" rl=%d%n", &reflevel},
-        {" c=%d%n", &component}
-      };
-
-      if(matches_regex && sscanf(objectname, "%s it=%d%n", varname, &iteration, &nread) == 2)
-      {
-        offset += nread;
-        for(int i = 0 ; i < DIM(tagvals) ; i++)
-        {
-          int didmatch;
-          if((didmatch = sscanf(objectname+offset, tagvals[i].tag, tagvals[i].val, &nread)) == 1)
-            offset += nread;
-          else
-            *tagvals[i].val = 0;
-          if(verbosity >= 5)
-          {
-            CCTK_VInfo(CCTK_THORNSTRING, "Testing dataset name coda '%s' against tag '%s': found %smatch and will use value %d",
-                        objectname+offset-didmatch*nread, tagvals[i].tag, didmatch?"":"no ", *tagvals[i].val);
-          }
-        }
-        if(objectname[offset] == '\0') // there was leftover stuff we could not identify
-        {
-          // skip some reflevels if we already know we won't need them
-          is_desired_patch = (timelevel == 0)               && 
-                             (map == 0)                     &&
-                             (minimum_reflevel <= reflevel) &&
-                             (reflevel <= maximum_reflevel);
-
-          if (is_desired_patch && (varindex = CCTK_VarIndex(varname)) >= 0)
-          {
-            is_known_variable = 1;
-            if(verbosity >= 4)
-            {
-              CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s': match", objectname);
-            }
-          }
-        }
-        else
-        {
-          if(verbosity >= 1)
-          {
-            CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                       "Objectname '%s' could not be fully parsed.", objectname);
-          }
-        }
-      }
-    }
-    use_dataset = is_known_variable && matches_regex && is_desired_patch;
-
-    free(dataset_regex);
-  }
-
-  if(use_dataset)
+  if(UseThisDataset(from, objectname))
   {
     hsize_t dims[DIM(lsh)], ndims, objectsize;
     hid_t dataset, dataspace, datatype;
     struct pulldata pd;
+
+    const int success =
+      ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map,
+                             &reflevel, &component);
+    assert(success);
+
+    varindex = CCTK_VarIndex(varname);
+    assert(varindex >= 0);
 
     CHECK_ERROR (dataset = H5Dopen (from, objectname));
     CHECK_ERROR (datatype = H5Dget_type (dataset));
@@ -331,9 +379,10 @@ static herr_t ParseObject (hid_t from,
 
     if(verbosity >= 2)
       CCTK_VInfo(CCTK_THORNSTRING, "Reading dataset '%s'", objectname);
+
     objectsize = H5Sget_select_npoints (dataspace) * H5Tget_size (datatype);
     assert(objectsize > 0);
-    assert(vardata == NULL);
+
     vardata = malloc (objectsize);
     if (vardata == NULL)
     {
@@ -342,6 +391,7 @@ static herr_t ParseObject (hid_t from,
                   (int) objectsize, objectname);
       return -1; // NOTREACHED
     }
+
     // we hold of the actual read until really asked for in PullData
     pd.hasbeenread = 0;
     pd.vardata = vardata;
@@ -482,12 +532,14 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
           
           CHECK_ERROR (fh = H5Fopen (full_fn, H5F_ACC_RDONLY, H5P_DEFAULT));
           CHECK_ERROR (H5Giterate (fh, "/", NULL, ParseObject, cctkGH));
+          if(verbosity >= 1 && H5Fget_obj_count(fh, H5F_OBJ_ALL) > 1)
+          {
+            CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                       "Leaked %d HDF5 objects when parsing file '%s'.", H5Fget_obj_count(fh, H5F_OBJ_ALL) - 1, fn);
+          }
           CHECK_ERROR (H5Fclose (fh));
 
           free((void*)full_fn);
-
-          if(nioprocs == 1)
-            break;
         }
     }
     free(fns_buf);
