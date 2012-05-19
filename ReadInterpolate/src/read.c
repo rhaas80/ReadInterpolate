@@ -209,24 +209,10 @@ static herr_t ParseObject (hid_t from,
 {
   DECLARE_CCTK_PARAMETERS;
 
-  static const struct {
-    const char * pattern;
-    const int nintvals;
-  } dset_pattern[] = { // best if sorted by number of extracted ints
-    {"%s it=%d tl=0 m=0 rl=%d c=%d", 3},
-    {"%s it=%d m=0 rl=%d c=%d", 3},
-    {"%s it=%d tl=0 rl=%d c=%d", 3},
-    {"%s it=%d rl=%d c=%d", 3},
-    {"%s it=%d tl=0 rl=%d", 2},
-    {"%s it=%d m=0 c=%d", 2},
-    {"%s it=%d rl=%d", 2},
-    {"%s it=%d c=%d", 2},
-    {"%s it=%d", 1},
-  };
   int use_dataset;
 
   char varname[1042];
-  int iteration, reflevel, component, varindex;
+  int iteration, reflevel, component, timelevel, map, varindex;
   CCTK_INT lsh[3], map_is_cartesian;
   CCTK_REAL delta[DIM(lsh)], origin[DIM(lsh)];
   CCTK_REAL * vardata = NULL;
@@ -243,7 +229,7 @@ static herr_t ParseObject (hid_t from,
   {
     regmatch_t pmatch[8];
     char * dataset_regex = strdup(only_these_datasets), *scratchptr;
-    int matches_regex, is_known_variable, is_desired_reflevel;
+    int matches_regex, is_known_variable, is_desired_patch;
 
     assert(dataset_regex);
 
@@ -269,48 +255,64 @@ static herr_t ParseObject (hid_t from,
     }
 
     is_known_variable = 0;
-    is_desired_reflevel = 0;
-    for(int i = 0 ; matches_regex && i < DIM(dset_pattern) ; i++)
+    is_desired_patch = 0;
+    // match against dataset name pattern "thorn::name it=X tl=Y m=Z rl=U c=V"
     {
-      int intvals[5];
-      assert(DIM(intvals) >= dset_pattern[i].nintvals);
+      int nread, offset = 0;
+      struct {
+        const char * tag;
+        int * val;
+      } tagvals[] = {
+        {" tl=%d%n", &timelevel},
+        {" m=%d%n", &map},
+        {" rl=%d%n", &reflevel},
+        {" c=%d%n", &component}
+      };
 
-      if(verbosity >= 5)
+      if(matches_regex && sscanf(objectname, "%s it=%d%n", varname, &iteration, &nread) == 2)
       {
-        CCTK_VInfo(CCTK_THORNSTRING, "Testing dataset '%s' against pattern '%s'",
-                   objectname, dset_pattern[i].pattern);
-      }
-
-      reflevel = component = 0; // if there is only one of these, then Carpet skips the tag
-      if(sscanf(objectname, dset_pattern[i].pattern,
-            varname, &intvals[0], &intvals[1], &intvals[2], &intvals[3],
-            &intvals[4]) == dset_pattern[i].nintvals+1)
-      {
-        const int nvals = dset_pattern[i].nintvals;
-        // this hard codes information about the order of the elements
-        iteration = intvals[0];
-        if(nvals >= 1)
-          component = intvals[nvals-1];
-        if(nvals >= 2)
-          reflevel = intvals[nvals-2];
-
-        // skip some reflevels if we already know we won't need them
-        is_desired_reflevel = (minimum_reflevel <= reflevel) &&
-                              (reflevel <= maximum_reflevel);
-
-        if ((varindex = CCTK_VarIndex(varname)) >= 0)
+        offset += nread;
+        for(int i = 0 ; i < DIM(tagvals) ; i++)
         {
-          is_known_variable = 1;
-          if(verbosity >= 4)
+          int didmatch;
+          if((didmatch = sscanf(objectname+offset, tagvals[i].tag, tagvals[i].val, &nread)) == 1)
+            offset += nread;
+          else
+            *tagvals[i].val = 0;
+          if(verbosity >= 5)
           {
-            CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s' against pattern '%s': match",
-                        objectname, dset_pattern[i].pattern);
+            CCTK_VInfo(CCTK_THORNSTRING, "Testing dataset name coda '%s' against tag '%s': found %smatch and will use value %d",
+                        objectname+offset-didmatch*nread, tagvals[i].tag, didmatch?"":"no ", *tagvals[i].val);
           }
-          break;
+        }
+        if(objectname[offset] == '\0') // there was leftover stuff we could not identify
+        {
+          // skip some reflevels if we already know we won't need them
+          is_desired_patch = (timelevel == 0)               && 
+                             (map == 0)                     &&
+                             (minimum_reflevel <= reflevel) &&
+                             (reflevel <= maximum_reflevel);
+
+          if (is_desired_patch && (varindex = CCTK_VarIndex(varname)) >= 0)
+          {
+            is_known_variable = 1;
+            if(verbosity >= 4)
+            {
+              CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s': match", objectname);
+            }
+          }
+        }
+        else
+        {
+          if(verbosity >= 1)
+          {
+            CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                       "Objectname '%s' could not be fully parsed.", objectname);
+          }
         }
       }
     }
-    use_dataset = is_known_variable && matches_regex && is_desired_reflevel;
+    use_dataset = is_known_variable && matches_regex && is_desired_patch;
 
     free(dataset_regex);
   }
