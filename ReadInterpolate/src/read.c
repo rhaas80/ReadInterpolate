@@ -243,7 +243,7 @@ static herr_t ParseObject (hid_t from,
   {
     regmatch_t pmatch[8];
     char * dataset_regex = strdup(only_these_datasets), *scratchptr;
-    int matches_regex, is_known_variable;
+    int matches_regex, is_known_variable, is_desired_reflevel;
 
     assert(dataset_regex);
 
@@ -269,6 +269,7 @@ static herr_t ParseObject (hid_t from,
     }
 
     is_known_variable = 0;
+    is_desired_reflevel = 0;
     for(int i = 0 ; matches_regex && i < DIM(dset_pattern) ; i++)
     {
       int intvals[5];
@@ -280,7 +281,7 @@ static herr_t ParseObject (hid_t from,
                    objectname, dset_pattern[i].pattern);
       }
 
-      iteration = reflevel = component = 0;
+      reflevel = component = 0; // if there is only one of these, then Carpet skips the tag
       if(sscanf(objectname, dset_pattern[i].pattern,
             varname, &intvals[0], &intvals[1], &intvals[2], &intvals[3],
             &intvals[4]) == dset_pattern[i].nintvals+1)
@@ -292,6 +293,10 @@ static herr_t ParseObject (hid_t from,
           component = intvals[nvals-1];
         if(nvals >= 2)
           reflevel = intvals[nvals-2];
+
+        // skip some reflevels if we already know we won't need them
+        is_desired_reflevel = (minimum_reflevel <= reflevel) &&
+                              (reflevel <= maximum_reflevel);
 
         if ((varindex = CCTK_VarIndex(varname)) >= 0)
         {
@@ -305,7 +310,7 @@ static herr_t ParseObject (hid_t from,
         }
       }
     }
-    use_dataset = is_known_variable && matches_regex;
+    use_dataset = is_known_variable && matches_regex && is_desired_reflevel;
 
     free(dataset_regex);
   }

@@ -19,6 +19,16 @@ STRING only_these_datasets "comma separated list of dataset regular expression p
   ":g[xyz][xyz],:rho"              :: "metric and rho everywhere"
 } ".*"
 
+INT minimum_reflevel "ignore any datasets with refinement level less than this"
+{
+  0:* :: "minimum refinement level to keep"
+} 0
+
+INT maximum_reflevel "ignore any datasets with refinement level higher than this"
+{
+  0:* :: "maximum refinement level to keep"
+} 1000
+
 STRING interpolator_name "Which interpolator should I use"
 {
     ".+" :: "Any nonempty string"
