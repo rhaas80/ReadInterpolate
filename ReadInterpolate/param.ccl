@@ -1,5 +1,8 @@
 # Parameter definitions for thorn SOPP
 
+## File and dataset selection
+##
+
 STRING files "List of basenames of files to read in as initial data (e.g. omit the filename extention here)"
 {
   ".+" :: "Space-separated list of initial data filenames (basenames, e.g. excluding the file name extention)"
@@ -29,6 +32,15 @@ INT maximum_reflevel "ignore any datasets with refinement level higher than this
   0:* :: "maximum refinement level to keep"
 } 1000
 
+
+## Interpolator and patch placement option
+##
+
+REAL shift_read_datasets_by[3] "add to all read in coordinates"
+{
+ *:* :: "what used to be origin in datasets appear here"
+} 0.0
+
 STRING interpolator_name "Which interpolator should I use"
 {
     ".+" :: "Any nonempty string"
@@ -49,6 +61,9 @@ REAL epsilon "Tolerance when deciding if a grid point lies within an overlap reg
 # interpolate, which can happen if there are insufficient ghost-zones
 # for the interpolation method used, and can lead to processor-number
 # dependent results.
+
+## misc option
+##
 
 INT verbosity "how much diagnostic output to produce"
 {

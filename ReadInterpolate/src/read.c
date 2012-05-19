@@ -357,6 +357,9 @@ static herr_t ParseObject (hid_t from,
       read_real_attr(dataset, "origin", 3, origin);
       read_real_attr(dataset, "delta", 3, delta);
 
+      for(int i = 0 ; i < 3 ; i++)
+        origin[i] += shift_read_datasets_by[i];
+
       map_is_cartesian = 1;
 #if 0 // TODO: Make something like this work
       HDF5_BEGIN_TRY {

@@ -103,6 +103,9 @@ ReadInterpolate::interpolator_pars = "order=1 boundary_off_centering_tolerance={
 ReadInterpolate::only_these_datasets = ":alp ,
                                         :rho
                                        "
+ReadInterpolate::shift_read_datasets_by[0] = +3.14
+ReadInterpolate::shift_read_datasets_by[1] = -42
+ReadInterpolate::shift_read_datasets_by[2] = -6
 
 #----------
 # Numerics:
