@@ -56,6 +56,7 @@ static void read_int_attr(hid_t from, const char *attrname, int nelems,
                           CCTK_INT *data);
 static void read_real_attr(hid_t from, const char *attrname, int nelems,
                            CCTK_REAL *data);
+static char *trim(char *s);
 
 static int UseThisDataset(hid_t from, const char *objectsname);
 static int ParseDatasetNameTags(const char *objectsname, char *varname, 
@@ -254,6 +255,21 @@ static int ParseDatasetNameTags(const char *objectname, char *varname,
   return retval;
 }
 
+// trim whitespace from beginning and end of string, changes input array, save
+// to pass NULL
+char *trim(char *s)
+{
+  if(s != NULL)
+  {
+    for(int i = strlen(s) - 1 ; i >= 0 && isspace(s[i]) ; --i)
+      s[i] = '\0';
+    while(*s != '\0' && isspace(*s))
+      s++;
+  }
+
+  return s;
+}
+
 // match a string (object name) against a number of regular expressions
 static int MatchDatasetAgainstRegex(const char *objectname)
 {
@@ -266,13 +282,12 @@ static int MatchDatasetAgainstRegex(const char *objectname)
   assert(dataset_regex);
 
   int iregex = 0; // count which regex we re looking at
-  for(char *regex = strtok_r(dataset_regex, ",", &scratchptr) ;
+  for(char *regex = strtok_r(trim(dataset_regex), ",", &scratchptr) ;
       regex != NULL ;
-      regex = strtok_r(NULL, ",", &scratchptr), iregex += 1)
+      regex = trim(strtok_r(NULL, ",", &scratchptr)), iregex += 1)
   {
     // strip white space from beginning and end of pattern
-    for(int i = strlen(regex) - 1 ; i >= 0 && isspace(regex[i]) ; --i) regex[i] = '\0';
-    const int matched = CCTK_RegexMatch(objectname, regex+strspn(regex, " \n\t\v"), DIM(pmatch), pmatch);
+    const int matched = CCTK_RegexMatch(objectname, regex, DIM(pmatch), pmatch);
     if(matched > 0)
     {
       retval = 1;
@@ -560,7 +575,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
     assert(dataset_regex);
 
     int iregex = 0;
-    for(const char *regex = strtok_r(dataset_regex, ",", &scratchptr) ;
+    for(const char *regex = strtok_r(trim(dataset_regex), ",", &scratchptr) ;
         regex != NULL ;
         regex = strtok_r(NULL, ",", &scratchptr), iregex += 1)
     {
