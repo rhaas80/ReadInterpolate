@@ -272,11 +272,18 @@ static int MatchDatasetAgainstRegex(const char *objectname)
   {
     // strip white space from beginning and end of pattern
     for(int i = strlen(regex) - 1 ; i >= 0 && isspace(regex[i]) ; --i) regex[i] = '\0';
-    if(CCTK_RegexMatch(objectname, regex+strspn(regex, " \n\t\v"), DIM(pmatch), pmatch))
+    const int matched = CCTK_RegexMatch(objectname, regex+strspn(regex, " \n\t\v"), DIM(pmatch), pmatch);
+    if(matched > 0)
     {
       retval = 1;
       regexmatchedsomething[iregex] = 1; // record that this regular expression matched at least once
       break;
+    }
+    else if(matched < 0)
+    {
+      CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                 "Invalid regular expression '%s': does not compile", regex);
+      // NOTREACHED
     }
   }
   if(verbosity >= 4)
