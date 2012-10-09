@@ -1,5 +1,6 @@
 # grid structure
 # format: map reflevel component mglevel   processor bounding-box is-outer-boundary
+
 iteration 0
 maps 1
 0 mglevels 1
@@ -21,4 +22,3 @@ maps 1
 0 0 2 components 2
 0 0 2 0   0 ([52,52,52]:[84,84,68]:[1,1,1]/[52,52,52]:[84,84,68]/[33,33,17]/18513) [[0,0,0],[0,0,0]]
 0 0 2 1   1 ([52,52,69]:[84,84,84]:[1,1,1]/[52,52,69]:[84,84,84]/[33,33,16]/17424) [[0,0,0],[0,0,0]]
-
