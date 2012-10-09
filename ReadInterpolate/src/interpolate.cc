@@ -108,8 +108,6 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 
         DECLARE_CCTK_ARGUMENTS;
 
-        int minidx, maxidx; // gfindex3d of lower,left and upper,right corner of target domain
-
         // region for which we have enough inner and ghost points to interpolate,
         // assuming the interpolator needs cctk_nghostzones ghosts 
         CCTK_REAL xmin[3] = {origin[0]+(cctk_nghostzones[0]-1)*delta[0],
@@ -119,7 +117,6 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
                              origin[1]+(lsh[1]-cctk_nghostzones[1])*delta[1],
                              origin[2]+(lsh[2]-cctk_nghostzones[2])*delta[2]};
         CCTK_REAL *xyz[3] = {x,y,z};
-        CCTK_REAL overlaplower[3], overlapupper[3];
 
         CCTK_REAL * outvardata;  // pointer to output variable data
        
@@ -132,65 +129,49 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
           return; // NOTREACHED
         }
 
-        minidx = CCTK_GFINDEX3D(cctkGH, 0,0,0);
-        maxidx = CCTK_GFINDEX3D(cctkGH, cctk_lsh[0]-1,cctk_lsh[1]-1,cctk_lsh[2]-1);
-
-        for(int d = 0 ; d < 3 ; d++)
-        {
-          overlapupper[d] = MIN(xyz[d][maxidx], xmax[d]);
-          overlaplower[d] = MAX(xyz[d][minidx], xmin[d]);
-        }
-
         if(verbosity >= 6)
         {
-          CCTK_VInfo(CCTK_THORNSTRING, "checking for overlap against (%g,%g,%g)-(%g,%g,%g): (%g,%g,%g)-(%g,%g,%g)",
-                     x[minidx],z[minidx],z[minidx], x[maxidx],z[maxidx],z[maxidx],
-                     overlaplower[0],overlaplower[1],overlaplower[2],
-                     overlapupper[0],overlapupper[1],overlapupper[2]);
+          CCTK_VInfo(CCTK_THORNSTRING, "checking for overlap against (%g,%g,%g)-(%g,%g,%g)",
+                     xmin[0],xmin[1],xmin[2], xmax[0],xmax[1],xmax[2]);
         }
 
         // check for overlap and interpolate
-        if (overlapupper[0] > overlaplower[0] &&
-            overlapupper[1] > overlaplower[1] &&
-            overlapupper[2] > overlaplower[2])
+        size_t npoints = 0;
+
+        for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
         {
-          size_t npoints = 0;
-
-          for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
+          if(reflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
+             xmin[0]-epsilon <= x[idx] && x[idx]-epsilon <= xmax[0] &&
+             xmin[1]-epsilon <= y[idx] && y[idx]-epsilon <= xmax[1] &&
+             xmin[2]-epsilon <= z[idx] && z[idx]-epsilon <= xmax[2])
           {
-            if(reflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
-               overlaplower[0]-epsilon <= x[idx] && x[idx]-epsilon <= overlapupper[0] &&
-               overlaplower[1]-epsilon <= y[idx] && y[idx]-epsilon <= overlapupper[1] &&
-               overlaplower[2]-epsilon <= z[idx] && z[idx]-epsilon <= overlapupper[2])
+            interp_x[npoints] = x[idx];
+            interp_y[npoints] = y[idx];
+            interp_z[npoints] = z[idx];
+            interpthispoint[idx] = 1; // record that we need this point
+            npoints += 1;
+            if(verbosity >= 10 || (verbosity >= 9 && npoints % (1 + npoints / 10) == 0))
             {
-              interp_x[npoints] = x[idx];
-              interp_y[npoints] = y[idx];
-              interp_z[npoints] = z[idx];
-              interpthispoint[idx] = 1; // record that we need this point
-              npoints += 1;
-              if(verbosity >= 10 || (verbosity >= 9 && npoints % (1 + npoints / 10) == 0))
-              {
-                CCTK_VInfo(CCTK_THORNSTRING, "setting up interpolation for point %d (%g,%g,%g) source level %d",
-                           (int)npoints, x[idx],y[idx],z[idx], reflevel);
-              }
+              CCTK_VInfo(CCTK_THORNSTRING, "setting up interpolation for point %d (%g,%g,%g) source level %d",
+                         (int)npoints, x[idx],y[idx],z[idx], reflevel);
             }
-            else
-              interpthispoint[idx] = 0;
           }
+          else
+            interpthispoint[idx] = 0;
+        }
 
-          if(verbosity >= 5-(npoints>0))
-          {
-            CCTK_VInfo(CCTK_THORNSTRING, "found overlap and %d not-yet-seen points on source level %d on destination level %d for variable %s",
-                       (int)npoints, reflevel, Carpet::reflevel, CCTK_VarName(varindex));
-          }
+        if(verbosity >= 5-(npoints>0))
+        {
+          CCTK_VInfo(CCTK_THORNSTRING, "found overlap and %d not-yet-seen points on source level %d on destination level %d for variable %s",
+                     (int)npoints, reflevel, Carpet::reflevel, CCTK_VarName(varindex));
+        }
 
-          if(npoints > 0)
-          {
-            // ask for delayed read to be performed now that we know we need data
-            ReadInterpolate_PullData(token);
-            DoInterpolate(npoints, interp_x, interp_y, interp_z, 
-                          lsh, origin, delta, vardata, interp_data);
-          }
+        if(npoints > 0)
+        {
+          // ask for delayed read to be performed now that we know we need data
+          ReadInterpolate_PullData(token);
+          DoInterpolate(npoints, interp_x, interp_y, interp_z, 
+                        lsh, origin, delta, vardata, interp_data);
 
           for(int idx = cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2]-1 ; idx >= 0 ; --idx)
           {
@@ -206,8 +187,8 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
               }
             }
           }
-          assert(npoints == 0);
         }
+        assert(npoints == 0);
 
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
