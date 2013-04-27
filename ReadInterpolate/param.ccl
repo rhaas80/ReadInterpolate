@@ -62,6 +62,10 @@ REAL epsilon "Tolerance when deciding if a grid point lies within an overlap reg
 # for the interpolation method used, and can lead to processor-number
 # dependent results.
 
+BOOLEAN undo_rot90 "interpolate from 90 degree wedge onto larger domain"
+{
+} "no"
+
 ## misc option
 ##
 

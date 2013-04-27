@@ -140,14 +140,25 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 
         for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
         {
-          if(reflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
-             xmin[0]-epsilon <= x[idx] && x[idx]-epsilon <= xmax[0] &&
-             xmin[1]-epsilon <= y[idx] && y[idx]-epsilon <= xmax[1] &&
-             xmin[2]-epsilon <= z[idx] && z[idx]-epsilon <= xmax[2])
+          CCTK_REAL xL = x[idx], yL = y[idx], zL = z[idx];
+          if(undo_rot90)
           {
-            interp_x[npoints] = x[idx];
-            interp_y[npoints] = y[idx];
-            interp_z[npoints] = z[idx];
+            while(xL < 0 || yL < 0) // 90 degree rotation
+            {
+              CCTK_REAL tmp = yL;
+              yL = -xL;
+              xL = tmp;
+            }
+          }
+
+          if(reflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
+             xmin[0]-epsilon <= xL && xL-epsilon <= xmax[0] &&
+             xmin[1]-epsilon <= yL && yL-epsilon <= xmax[1] &&
+             xmin[2]-epsilon <= zL && zL-epsilon <= xmax[2])
+          {
+            interp_x[npoints] = xL;
+            interp_y[npoints] = yL;
+            interp_z[npoints] = zL;
             interpthispoint[idx] = 1; // record that we need this point
             npoints += 1;
             if(verbosity >= 10 || (verbosity >= 9 && npoints % (1 + npoints / 10) == 0))
