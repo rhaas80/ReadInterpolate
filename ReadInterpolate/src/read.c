@@ -24,10 +24,11 @@
  ********************************************************************/
 struct pulldata
 {
-  CCTK_INT hasbeenread; // only read data once
-  CCTK_REAL * vardata;  // a buffer suffiently large to hold all data
-  hid_t dataset;        // dataset that hold the data
-  hid_t datatype;       // data type of variable (must be REAL)
+  CCTK_INT hasbeenread;    // only read data once
+  const char * objectname; // name of HDF5 dataset
+  CCTK_REAL * vardata;     // a buffer suffiently large to hold all data
+  hid_t dataset;           // dataset that hold the data
+  hid_t datatype;          // data type of variable (must be REAL)
 };
 
 #define METADATA_GROUP "Parameters and Global Attributes"
@@ -327,6 +328,12 @@ static int UseThisDataset(hid_t from, const char *objectname)
   int matches_regex, is_known_variable, is_desired_patch;
   int retval;
 
+  // we are interested in datasets only - skip anything else
+  H5G_stat_t object_info;
+  CHECK_ERROR (H5Gget_objinfo (from, objectname, 0, &object_info));
+  if (object_info.type != H5G_DATASET)
+    return 0;
+
   matches_regex = MatchDatasetAgainstRegex(objectname);
 
   is_known_variable = 0;
@@ -400,7 +407,7 @@ static herr_t ParseObject (hid_t from,
     assert(datatype = H5T_NATIVE_DOUBLE);
 
     if(verbosity >= 2)
-      CCTK_VInfo(CCTK_THORNSTRING, "Reading dataset '%s'", objectname);
+      CCTK_VInfo(CCTK_THORNSTRING, "Examining dataset '%s'", objectname);
 
     objectsize = H5Sget_select_npoints (dataspace) * H5Tget_size (datatype);
     assert(objectsize > 0);
@@ -416,6 +423,7 @@ static herr_t ParseObject (hid_t from,
 
     // we hold of the actual read until really asked for in PullData
     pd.hasbeenread = 0;
+    pd.objectname = objectname;
     pd.vardata = vardata;
     pd.dataset = dataset;
     pd.datatype = datatype;
@@ -443,7 +451,7 @@ static herr_t ParseObject (hid_t from,
       CCTK_INT size = 1;
       for(int d = 0 ; d < (int)ndims ; d++)
       {
-        assert (ndims-1-d>=0 && ndims-1-d<ndims);
+        assert ((int)ndims-1-d>=0 && ndims-1-d<ndims);
         lsh[d] = (CCTK_INT)dims[ndims-1-d]; // HDF5 has the slowest changing direction first, Cactus the fastest
         size *= lsh[d];
       }
@@ -482,10 +490,15 @@ static herr_t ParseObject (hid_t from,
 // overlap the local components.
 void ReadInterpolate_PullData(void * token)
 {
+  DECLARE_CCTK_PARAMETERS;
+
   struct pulldata * pd = (struct pulldata *)token;
 
   if(!pd->hasbeenread)
   {
+    if(verbosity >= 2)
+      CCTK_VInfo(CCTK_THORNSTRING, "Reading data from dataset '%s'", pd->objectname);
+
     CHECK_ERROR (H5Dread (pd->dataset, pd->datatype, H5S_ALL, H5S_ALL,
                           H5P_DEFAULT, pd->vardata));
     pd->hasbeenread = 1;
@@ -557,7 +570,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
           if(verbosity >= 1 && H5Fget_obj_count(fh, H5F_OBJ_ALL) > 1)
           {
             CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                       "Leaked %d HDF5 objects when parsing file '%s'.", H5Fget_obj_count(fh, H5F_OBJ_ALL) - 1, fn);
+                       "Leaked %d HDF5 objects when parsing file '%s'.", (int)H5Fget_obj_count(fh, H5F_OBJ_ALL) - 1, fn);
           }
           CHECK_ERROR (H5Fclose (fh));
 

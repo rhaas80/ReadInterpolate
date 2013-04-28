@@ -108,15 +108,33 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 
         DECLARE_CCTK_ARGUMENTS;
 
+        CCTK_REAL *xyz[3] = {x,y,z};
         // region for which we have enough inner and ghost points to interpolate,
         // assuming the interpolator needs cctk_nghostzones ghosts 
-        CCTK_REAL xmin[3] = {origin[0]+(cctk_nghostzones[0]-1)*delta[0],
-                             origin[1]+(cctk_nghostzones[1]-1)*delta[1],
-                             origin[2]+(cctk_nghostzones[2]-1)*delta[2]};
-        CCTK_REAL xmax[3] = {origin[0]+(lsh[0]-cctk_nghostzones[0])*delta[0],
-                             origin[1]+(lsh[1]-cctk_nghostzones[1])*delta[1],
-                             origin[2]+(lsh[2]-cctk_nghostzones[2])*delta[2]};
-        CCTK_REAL *xyz[3] = {x,y,z};
+        // we allow usage of one sided interpolation at outer boundaries and
+        // symmetry boundaries, where we have no other choice
+        // NOTE: this will give unexpected results should the read in data
+        // happen to have a component end at the outer boundary of the new
+        // domain and then have further components further out. In this case
+        // the value the is interpolated depends on the order in which the
+        // datasets appear in the file. The HDF5 files have cctk_bbox attribute
+        // however I suspect it to not be trustworthy once we start merging
+        // files or use the slicer to get data out of files.
+        int require_ghosts[6];
+        for(int d = 0 ; d < 3 ; d++) { // allow one side interpolation if read in patch covers outer boundary
+          int ijk[3] = {0,0,0};
+          ijk[d] = cctk_lsh[d]-1;
+          CCTK_REAL xyzmin = xyz[d][CCTK_GFINDEX3D(cctkGH, 0,0,0)];
+          CCTK_REAL xyzmax = xyz[d][CCTK_GFINDEX3D(cctkGH, ijk[0],ijk[1],ijk[2])];
+          require_ghosts[2*d+0] = !(origin[d] <= xyzmin && cctk_bbox[2*d+0]);
+          require_ghosts[2*d+1] = !(origin[d]+(lsh[d]-1)*delta[d] >= xyzmax && cctk_bbox[2*d+1]);
+        }
+        CCTK_REAL xmin[3] = {origin[0]+require_ghosts[0]*(cctk_nghostzones[0]-1)*delta[0],
+                             origin[1]+require_ghosts[2]*(cctk_nghostzones[1]-1)*delta[1],
+                             origin[2]+require_ghosts[4]*(cctk_nghostzones[2]-1)*delta[2]};
+        CCTK_REAL xmax[3] = {origin[0]+(lsh[0]-1-require_ghosts[1]*(cctk_nghostzones[0]-1))*delta[0],
+                             origin[1]+(lsh[1]-1-require_ghosts[3]*(cctk_nghostzones[1]-1))*delta[1],
+                             origin[2]+(lsh[2]-1-require_ghosts[5]*(cctk_nghostzones[2]-1))*delta[2]};
 
         CCTK_REAL * outvardata;  // pointer to output variable data
        
@@ -227,10 +245,10 @@ static void DoInterpolate(size_t npoints,
   int operator_handle, param_table_handle;
   operator_handle = CCTK_InterpHandle(interpolator_name);
   if (operator_handle < 0)
-          CCTK_WARN(CCTK_WARN_ABORT, "can’t get interpolation handle!");
+          CCTK_WARN(CCTK_WARN_ABORT, "cannot get interpolation handle!");
   param_table_handle = Util_TableCreateFromString(interpolator_pars);
   if (param_table_handle < 0)
-          CCTK_WARN(CCTK_WARN_ABORT, "can’t create parameter table!");
+          CCTK_WARN(CCTK_WARN_ABORT, "cannot create parameter table!");
 
 
   // do the actual interpolation, and check for error returns 
