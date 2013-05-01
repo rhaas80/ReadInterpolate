@@ -78,7 +78,7 @@ static int MatchDatasetAgainstRegex(const char *objectname);
                                                                               \
             if (_error_code < 0)                                              \
             {                                                                 \
-              CCTK_VWarn (CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,\
+              CCTK_VError (__LINE__, __FILE__, CCTK_THORNSTRING,\
                                "WARNING: line %d: HDF5 call '%s' returned "   \
                                "error code %d\n",                             \
                                 __LINE__, #hdf5_call, _error_code);           \
@@ -143,7 +143,8 @@ static int get_nioprocs(const cGH * cctkGH, const char *basename)
   // memory for the filenames
   if (file < 0) {
     CCTK_VWarn (CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                "No valid HDF5 file with basename \"%s\" found", basename);
+                "No valid HDF5 file with basename \"%s/%s\" found", 
+                filereader_ID_dir, basename);
   }
   for (int i = 0 ; i < nfilenames ; i++)
   {
@@ -297,7 +298,7 @@ static int MatchDatasetAgainstRegex(const char *objectname)
     }
     else if(matched < 0)
     {
-      CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+      CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
                  "Invalid regular expression '%s': does not compile", regex);
       // NOTREACHED
     }
@@ -415,7 +416,7 @@ static herr_t ParseObject (hid_t from,
     vardata = malloc (objectsize);
     if (vardata == NULL)
     {
-      CCTK_VWarn (CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+      CCTK_VError (__LINE__, __FILE__, CCTK_THORNSTRING,
                   "failled to allocate %d bytes of memory for %s, giving up",
                   (int) objectsize, objectname);
       return -1; // NOTREACHED
@@ -526,7 +527,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
       int ierr = CCTK_GroupStorageIncrease(cctkGH, 1, &group, &timelevels, NULL);
       if(ierr < 0)
       {
-        CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+        CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
                    "Could not allocate storage for '%s', error = %d",
                    groups[i], ierr);
       }
@@ -547,8 +548,9 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
 
         if(nioprocs < 0)
         {
-          CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                     "Could not open file '%s' to read initial data", fn);
+          CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+                     "Could not open file with basename '%s/%s' to read initial data",
+                     filereader_ID_dir, fn);
           return; // NOTREACHED
         }
 
@@ -605,7 +607,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
 
     if(!allmatched)
     {
-      CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+      CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
                  "Some regular expresion(s) did not match anything.");
       return; // NOTREACHED
     }
@@ -621,7 +623,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
       int ierr = CCTK_GroupStorageDecrease(cctkGH, 1, &group, &timelevels, NULL);
       if(ierr < 0)
       {
-        CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+        CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
                    "Could not deallocate storage for '%s', error = %d",
                    groups[i], ierr);
       }

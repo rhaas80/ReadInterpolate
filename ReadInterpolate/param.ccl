@@ -3,6 +3,7 @@
 ## File and dataset selection
 ##
 
+# we use IO::filereader_ID_dir as the folder part of the filename
 STRING files "List of basenames of files to read in as initial data (e.g. omit the filename extention here)"
 {
   ".+" :: "Space-separated list of initial data filenames (basenames, e.g. excluding the file name extention)"
