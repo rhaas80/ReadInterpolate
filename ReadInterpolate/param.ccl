@@ -16,6 +16,8 @@ STRING files "List of basenames of files to read in as initial data (e.g. omit t
 # * the Cactus regex function does not return a distinct error code for invalid regex and no match
 # ** this means that invalid regex are caught as "matches nothing" at the end
 # * the '[:]' construct is used because the param.ccl parser cannot no handle "::", the actual regex in parameter files are fine
+#
+# * curerntly we HARD code conditions so that only tl=0 and map=0 datasets are read
 STRING only_these_datasets "comma separated list of dataset regular expression patterns to consider for reading"
 {
   ".+"                             :: "any valid Cactus regular expression"
@@ -32,7 +34,6 @@ INT maximum_reflevel "ignore any datasets with refinement level higher than this
 {
   0:* :: "maximum refinement level to keep"
 } 1000
-
 
 ## Interpolator and patch placement option
 ##

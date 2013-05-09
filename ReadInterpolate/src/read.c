@@ -324,9 +324,9 @@ static int UseThisDataset(hid_t from, const char *objectname)
   DECLARE_CCTK_PARAMETERS;
 
   char varname[1042];
-  int iteration, reflevel, component, timelevel, map;
+  int iteration, reflevel, component, timelevel, map, varindex;
 
-  int matches_regex, is_known_variable, is_desired_patch;
+  int matches_regex, is_known_variable, is_desired_patch, is_gf;
   int retval;
 
   // we are interested in datasets only - skip anything else
@@ -339,6 +339,7 @@ static int UseThisDataset(hid_t from, const char *objectname)
 
   is_known_variable = 0;
   is_desired_patch = 0;
+  is_gf = 0;
   if(ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map, &reflevel, &component))
   {
     // skip some reflevels if we already know we won't need them
@@ -347,13 +348,15 @@ static int UseThisDataset(hid_t from, const char *objectname)
                        (minimum_reflevel <= reflevel) &&
                        (reflevel <= maximum_reflevel);
 
-    if(CCTK_VarIndex(varname) >= 0)
+    varindex = CCTK_VarIndex(varname);
+    if(varindex >= 0)
     {
       is_known_variable = 1;
       if(verbosity >= 4)
       {
         CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s': match", objectname);
       }
+      is_gf = CCTK_GroupTypeFromVarI(varindex) == CCTK_GF;
     }
   }
   else
@@ -365,7 +368,7 @@ static int UseThisDataset(hid_t from, const char *objectname)
     }
   }
 
-  retval = is_known_variable && matches_regex && is_desired_patch;
+  retval = is_known_variable && matches_regex && is_desired_patch && is_gf;
 
   return retval;
 }
