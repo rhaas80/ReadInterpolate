@@ -326,7 +326,7 @@ static int UseThisDataset(hid_t from, const char *objectname)
   char varname[1042];
   int iteration, reflevel, component, timelevel, map, varindex;
 
-  int matches_regex, is_known_variable, is_desired_patch, is_gf;
+  int matches_regex, is_known_variable, is_desired_patch, is_gf, is_real;
   int retval;
 
   // we are interested in datasets only - skip anything else
@@ -340,6 +340,7 @@ static int UseThisDataset(hid_t from, const char *objectname)
   is_known_variable = 0;
   is_desired_patch = 0;
   is_gf = 0;
+  is_real = 0;
   if(ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map, &reflevel, &component))
   {
     // skip some reflevels if we already know we won't need them
@@ -357,6 +358,7 @@ static int UseThisDataset(hid_t from, const char *objectname)
         CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s': match", objectname);
       }
       is_gf = CCTK_GroupTypeFromVarI(varindex) == CCTK_GF;
+      is_real = CCTK_VarTypeI(varindex) == CCTK_VARIABLE_REAL;
     }
   }
   else
@@ -368,7 +370,27 @@ static int UseThisDataset(hid_t from, const char *objectname)
     }
   }
 
-  retval = is_known_variable && matches_regex && is_desired_patch && is_gf;
+  if(is_known_variable && matches_regex && is_desired_patch && is_gf &&
+     !is_real)
+  {
+    static char *have_warned = NULL;
+    if(have_warned == NULL)
+    {
+      // calloc initializes to zero
+      have_warned = calloc(CCTK_NumVars(), sizeof(char));
+      assert(have_warned != NULL);
+    }
+    if((verbosity == 1 && !have_warned[varindex]) || verbosity >= 2)
+    {
+      CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                 "Skipping integer variable '%s'. Do not know how to interpolate integers.",
+                 varname);
+      have_warned[varindex] = 1;
+    }
+  }
+
+  retval = is_known_variable && matches_regex && is_desired_patch && is_gf &&
+           is_real;
 
   return retval;
 }
@@ -459,7 +481,12 @@ static herr_t ParseObject (hid_t from,
         lsh[d] = (CCTK_INT)dims[ndims-1-d]; // HDF5 has the slowest changing direction first, Cactus the fastest
         size *= lsh[d];
       }
-      assert(size*sizeof(CCTK_REAL) == objectsize);
+      if(size*sizeof(CCTK_REAL) != objectsize) {
+        CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+                    "Unexpected size %d bytes of dataset '%s' does not agree "
+                    "with size of CCTK_REAL dataset (%d).",
+                    (int)objectsize, objectname, size*(int)sizeof(CCTK_REAL));
+      }
 
       if(verbosity >= 3)
       {
