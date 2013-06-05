@@ -178,7 +178,7 @@ static void read_int_attr(hid_t from, const char *attrname, int nelems, CCTK_INT
   CHECK_ERROR (datatype = H5Aget_type (attr));
   CHECK_ERROR (dataspace = H5Aget_space (attr));
 
-  assert(datatype = H5T_NATIVE_INT);
+  assert(datatype == H5T_NATIVE_INT);
 
   CHECK_ERROR (attrsize = H5Sget_simple_extent_npoints (dataspace));
   assert((int)attrsize == nelems);
@@ -199,7 +199,7 @@ static void read_real_attr(hid_t from, const char *attrname, int nelems, CCTK_RE
   CHECK_ERROR (datatype = H5Aget_type (attr));
   CHECK_ERROR (dataspace = H5Aget_space (attr));
 
-  assert(datatype = H5T_NATIVE_DOUBLE);
+  assert(datatype == H5T_NATIVE_DOUBLE);
 
   CHECK_ERROR (attrsize = H5Sget_simple_extent_npoints (dataspace));
   assert((int)attrsize == nelems);
@@ -430,7 +430,7 @@ static herr_t ParseObject (hid_t from,
     CHECK_ERROR (datatype = H5Dget_type (dataset));
     CHECK_ERROR (dataspace = H5Dget_space (dataset));
 
-    assert(datatype = H5T_NATIVE_DOUBLE);
+    assert(datatype == H5T_NATIVE_DOUBLE);
 
     if(verbosity >= 2)
       CCTK_VInfo(CCTK_THORNSTRING, "Examining dataset '%s'", objectname);
