@@ -171,19 +171,16 @@ static int get_nioprocs(const cGH * cctkGH, const char *basename)
 // read in a CCTK_INT attribute
 static void read_int_attr(hid_t from, const char *attrname, int nelems, CCTK_INT *data)
 {
-  hid_t attr, datatype, dataspace;
+  hid_t attr, dataspace;
   hsize_t attrsize;
 
   CHECK_ERROR (attr = H5Aopen_name (from, attrname));
-  CHECK_ERROR (datatype = H5Aget_type (attr));
   CHECK_ERROR (dataspace = H5Aget_space (attr));
-
-  assert(datatype == H5T_NATIVE_INT);
 
   CHECK_ERROR (attrsize = H5Sget_simple_extent_npoints (dataspace));
   assert((int)attrsize == nelems);
 
-  CHECK_ERROR (H5Aread (attr, datatype, data));
+  CHECK_ERROR (H5Aread (attr, H5T_NATIVE_INT, data));
 
   CHECK_ERROR (H5Sclose (dataspace));
   CHECK_ERROR (H5Aclose (attr));
@@ -192,19 +189,16 @@ static void read_int_attr(hid_t from, const char *attrname, int nelems, CCTK_INT
 // read in a CCTK_REAL attribute
 static void read_real_attr(hid_t from, const char *attrname, int nelems, CCTK_REAL *data)
 {
-  hid_t attr, datatype, dataspace;
+  hid_t attr, dataspace;
   hsize_t attrsize;
 
   CHECK_ERROR (attr = H5Aopen_name (from, attrname));
-  CHECK_ERROR (datatype = H5Aget_type (attr));
   CHECK_ERROR (dataspace = H5Aget_space (attr));
-
-  assert(datatype == H5T_NATIVE_DOUBLE);
 
   CHECK_ERROR (attrsize = H5Sget_simple_extent_npoints (dataspace));
   assert((int)attrsize == nelems);
 
-  CHECK_ERROR (H5Aread (attr, datatype, data));
+  CHECK_ERROR (H5Aread (attr, H5T_NATIVE_DOUBLE, data));
 
   CHECK_ERROR (H5Sclose (dataspace));
   CHECK_ERROR (H5Aclose (attr));
@@ -417,6 +411,7 @@ static herr_t ParseObject (hid_t from,
     hsize_t dims[DIM(lsh)], ndims, objectsize;
     hid_t dataset, dataspace, datatype;
     struct pulldata pd;
+    int typesize, vartype;
 
     const int success =
       ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map,
@@ -426,16 +421,29 @@ static herr_t ParseObject (hid_t from,
     varindex = CCTK_VarIndex(varname);
     assert(varindex >= 0);
 
-    CHECK_ERROR (dataset = H5Dopen (from, objectname));
-    CHECK_ERROR (datatype = H5Dget_type (dataset));
-    CHECK_ERROR (dataspace = H5Dget_space (dataset));
+    vartype = CCTK_VarTypeI(varindex);
+    assert(vartype >= 0);
 
-    assert(datatype == H5T_NATIVE_DOUBLE);
+
+    CHECK_ERROR (dataset = H5Dopen (from, objectname));
+    CHECK_ERROR (dataspace = H5Dget_space (dataset));
 
     if(verbosity >= 2)
       CCTK_VInfo(CCTK_THORNSTRING, "Examining dataset '%s'", objectname);
 
-    objectsize = H5Sget_select_npoints (dataspace) * H5Tget_size (datatype);
+    // get storage for data
+    if(vartype == CCTK_VARIABLE_REAL) {
+      datatype = H5T_NATIVE_DOUBLE;
+      typesize = sizeof(CCTK_REAL);
+    } else if(vartype == CCTK_VARIABLE_INT) {
+      datatype = H5T_NATIVE_INT;
+      typesize = sizeof(CCTK_INT);
+    } else {
+      CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+                  "Do not know how to handle CCTK type class %d", vartype);
+    }
+
+    objectsize = H5Sget_select_npoints (dataspace) * typesize;
     assert(objectsize > 0);
 
     vardata = malloc (objectsize);
@@ -481,11 +489,11 @@ static herr_t ParseObject (hid_t from,
         lsh[d] = (CCTK_INT)dims[ndims-1-d]; // HDF5 has the slowest changing direction first, Cactus the fastest
         size *= lsh[d];
       }
-      if(size*sizeof(CCTK_REAL) != objectsize) {
+      if(size*typesize != (int)objectsize) {
         CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
                     "Unexpected size %d bytes of dataset '%s' does not agree "
-                    "with size of CCTK_REAL dataset (%d).",
-                    (int)objectsize, objectname, size*(int)sizeof(CCTK_REAL));
+                    "with size of CCTK_REAL or CCTK_INT dataset (%d).",
+                    (int)objectsize, objectname, size*typesize);
       }
 
       if(verbosity >= 3)
