@@ -1,12 +1,12 @@
-# Parameter definitions for thorn SOPP
+# Parameter definitions for thorn ReadInterpolate
 
 ## File and dataset selection
 ##
 
 # we use IO::filereader_ID_dir as the folder part of the filename
-STRING files "List of basenames of files to read in as initial data (e.g. omit the filename extention here)"
+STRING files "List of basenames of files to read in as initial data (e.g. omit the .file_XXX.h5 part)"
 {
-  ".+" :: "Space-separated list of initial data filenames (basenames, e.g. excluding the file name extention)"
+  ".+" :: "Space-separated list of initial data filenames"
   "^$" :: "An empty string for not recovering initial data"
 } ""
 
