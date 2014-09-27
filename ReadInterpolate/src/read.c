@@ -253,7 +253,7 @@ static int ParseDatasetNameTags(const char *objectname, char *varname,
 
 // trim whitespace from beginning and end of string, changes input array, save
 // to pass NULL
-char *trim(char *s)
+static char *trim(char *s)
 {
   if(s != NULL)
   {
@@ -278,7 +278,7 @@ static int MatchDatasetAgainstRegex(const char *objectname)
   assert(dataset_regex);
 
   int iregex = 0; // count which regex we re looking at
-  for(char *regex = strtok_r(trim(dataset_regex), ",", &scratchptr) ;
+  for(char *regex = trim(strtok_r(dataset_regex, ",", &scratchptr)) ;
       regex != NULL ;
       regex = trim(strtok_r(NULL, ",", &scratchptr)), iregex += 1)
   {
