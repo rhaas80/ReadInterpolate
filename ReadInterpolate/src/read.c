@@ -354,6 +354,26 @@ static int UseThisDataset(hid_t from, const char *objectname)
       is_gf = CCTK_GroupTypeFromVarI(varindex) == CCTK_GF;
       is_real = CCTK_VarTypeI(varindex) == CCTK_VARIABLE_REAL;
     }
+
+    // TODO: handle integer variables
+    if(is_known_variable && matches_regex && is_desired_patch && is_gf &&
+       !is_real)
+    {
+      static char *have_warned = NULL;
+      if(have_warned == NULL)
+      {
+        // calloc initializes to zero
+        have_warned = calloc(CCTK_NumVars(), sizeof(char));
+        assert(have_warned != NULL);
+      }
+      if((verbosity == 1 && !have_warned[varindex]) || verbosity >= 2)
+      {
+        CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                   "Skipping integer variable '%s'. Do not know how to interpolate integers.",
+                   varname);
+        have_warned[varindex] = 1;
+      }
+    }
   }
   else
   {
@@ -361,25 +381,6 @@ static int UseThisDataset(hid_t from, const char *objectname)
     {
       CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
                  "Objectname '%s' could not be fully parsed.", objectname);
-    }
-  }
-
-  if(is_known_variable && matches_regex && is_desired_patch && is_gf &&
-     !is_real)
-  {
-    static char *have_warned = NULL;
-    if(have_warned == NULL)
-    {
-      // calloc initializes to zero
-      have_warned = calloc(CCTK_NumVars(), sizeof(char));
-      assert(have_warned != NULL);
-    }
-    if((verbosity == 1 && !have_warned[varindex]) || verbosity >= 2)
-    {
-      CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                 "Skipping integer variable '%s'. Do not know how to interpolate integers.",
-                 varname);
-      have_warned[varindex] = 1;
     }
   }
 
