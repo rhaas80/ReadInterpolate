@@ -429,7 +429,7 @@ static herr_t ParseObject (hid_t from,
     CHECK_ERROR (dataspace = H5Dget_space (dataset));
 
     if(verbosity >= 2)
-      CCTK_VInfo(CCTK_THORNSTRING, "Examining dataset '%s'", objectname);
+      CCTK_VInfo(CCTK_THORNSTRING, "Using dataset '%s'", objectname);
 
     // get storage for data
     if(vartype == CCTK_VARIABLE_REAL) {
@@ -519,7 +519,12 @@ static herr_t ParseObject (hid_t from,
     assert(vardata);
     free(vardata);
     vardata = NULL;
-  } // if(is_known_variable
+  } // if(UseThisDataset
+  else
+  {
+    if(verbosity >= 2)
+      CCTK_VInfo(CCTK_THORNSTRING, "Not using dataset '%s' after all.", objectname);
+  }
 
   return 0;
 }
