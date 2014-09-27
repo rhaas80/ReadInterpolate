@@ -1,7 +1,11 @@
 # Main make.code.defn file for thorn ReadInterpolate
 
 # Source files in this directory
-SRCS = read.c interpolate.cc
+SRCS = \
+  interpolate.cc \
+  paramcheck.c \
+  read.c \
+  $(NULL)
 
 # Subdirectories containing source files
 SUBDIRS = 

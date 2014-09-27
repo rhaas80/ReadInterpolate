@@ -1,5 +1,11 @@
 # Schedule definitions for thorn ReadInterpolate
 
+schedule ReadInterpolate_ParamCheck in CCTK_PARAMCHECK
+{
+  LANG: C
+  OPTIONS: global
+} "Sanity check given parameters"
+
 # need to schedule late apparently for CartGrid3d to finish setting up the
 # coordinates (I think)
 schedule ReadInterpolate_Read IN CCTK_INITIAL AFTER ADMBase_InitialData AFTER HydroBase_Initial BEFORE ADMBase_PostInitial BEFORE HydroBase_Prim2ConInitial
