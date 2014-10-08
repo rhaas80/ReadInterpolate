@@ -39,6 +39,7 @@ struct pulldata
  *********************     Local Data         ***********************
  ********************************************************************/
 static int regexmatchedsomething[MAX_N_REGEX];
+static int * varsread = NULL;
 
 /********************************************************************
  ********************* Other Routine Prototypes *********************
@@ -509,6 +510,7 @@ static herr_t ParseObject (hid_t from,
     }
 
     // interpolate onto all overlapping grid patches
+    varsread[varindex] = 1;
     ReadInterpolate_Interpolate(cctkGH, iteration, component, reflevel,
                                 varindex, lsh, origin, delta, vardata, &pd);
     
@@ -578,6 +580,9 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
     }
     ReadInterpolate_ClearRefLevelSeen(cctkGH); // needs to be a C++ function
   }
+
+  varsread = calloc(CCTK_NumVars(), sizeof(*varsread));
+  assert(varsread);
 
   // loop over all input files
   {
@@ -657,6 +662,22 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
     }
   }
 
+  // output names of variables for which we read data so that users knows what we did
+  if(verbosity >= 1)
+  {
+    const int numvars = CCTK_NumVars();
+    for(int varindex = 0 ; varindex < numvars ; varindex++)
+    {
+      if(varsread[varindex])
+      {
+        char * fullname = CCTK_FullName(varindex);
+        assert(fullname);
+        CCTK_VInfo(CCTK_THORNSTRING, "Read data for '%s'", fullname);
+        free(fullname), fullname = NULL;
+      }
+    }
+  }
+
   // free storage for temp workspace
   {
     ReadInterpolate_CheckAllPointsSet(cctkGH);
@@ -673,6 +694,8 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
       }
     }
   }
+
+  free(varsread), varsread = NULL;
 }
 
 
