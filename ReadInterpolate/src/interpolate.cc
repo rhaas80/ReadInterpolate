@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <map>
 
 #include "cctk.h"
 #include "cctk_Arguments.h"
@@ -27,25 +28,21 @@ static void DoInterpolate(size_t npoints,
     const CCTK_REAL * in_array, CCTK_REAL * out_array);
 
 /********************************************************************
- *********************     External Routines   **********************
+ *********************     Local Data         ***********************
  ********************************************************************/
 
-// set all seen refinement level data to -1 so that the coarsest on triggers
-void ReadInterpolate_ClearRefLevelSeen(const cGH * cctkGH)
-{
-  //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
-    BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
-      BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
+typedef std::map<int, int> varseenmap;
+static varseenmap varseen;
 
-        DECLARE_CCTK_ARGUMENTS;
+/********************************************************************
+ ********************* Internal Routines  ***************************
+ ********************************************************************/
 
-        for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
-          reflevelseen[idx] = -1;
+static void ClearRefLevelSeen(const cGH * cctkGH, const int timelevel);
 
-      } END_LOCAL_COMPONENT_LOOP;
-    } END_LOCAL_MAP_LOOP;
-  //} END_REFLEVEL_LOOP;
-}
+/********************************************************************
+ *********************     External Routines   **********************
+ ********************************************************************/
 
 // check that all target points have been set to something
 void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
@@ -53,45 +50,74 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
   DECLARE_CCTK_PARAMETERS;
 
   int nunset_points = 0;
+  int nunset_vars = 0;
 
+  for(varseenmap::const_iterator it = varseen.begin(), end = varseen.end() ;
+      it != end ;
+      it++) {
+    const int varindex = it->first;
+    const int timelevel = it->second;
   //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
-    int nunset_points_level = 0;
+    int nunset_points_var = 0;
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
         DECLARE_CCTK_ARGUMENTS;
+        CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
+          CCTK_VarDataPtr(cctkGH, timelevel,
+                          CCTK_THORNSTRING "::reflevelseen"));
+        assert(myreflevelseen);
 
         for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
         {
-          if(reflevelseen[idx] == -1)
+          if(myreflevelseen[idx] == -1)
           {
-            nunset_points_level += 1;
+            if(nunset_points_var == 0)
+              nunset_vars += 1;
+            nunset_points_var += 1;
             if(verbosity >= 8)
             {
-              CCTK_VInfo(CCTK_THORNSTRING, "Point (%g,%g,%g) on target level %d was not set",
-                         x[idx],y[idx],z[idx], Carpet::reflevel);
+              char *varname = CCTK_FullName(varindex);
+              CCTK_VInfo(CCTK_THORNSTRING, "Point (%g,%g,%g) on target level %d was not set for variable '%s'",
+                         x[idx],y[idx],z[idx], Carpet::reflevel, varname);
+              free(varname);
             }
           }
         }
 
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
-    if(nunset_points_level > 0 && verbosity > 1)
+    if(nunset_points_var > 0 && verbosity > 1)
     {
+      char *varname = CCTK_FullName(varindex);
       CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                 "There were %d points that could not be set on target level %d.",
-                 nunset_points_level, Carpet::reflevel);
+                 "There were %d points that could not be set on target level %d for variable '%s'.",
+                 nunset_points_var, Carpet::reflevel, varname);
+      free(varname);
     }
-    nunset_points += nunset_points_level;
+    nunset_points += nunset_points_var;
   //} END_REFLEVEL_LOOP;
+  }
 
   if(nunset_points > 0)
   {
     CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
-               "There were %d points that could not be set.",
-               nunset_points);
+               "There were %d points in %d variables that could not be set.",
+               nunset_points, nunset_vars);
     return; // NOTREACHED
   }
+
+  // free storage for temp workspace
+  const int timelevels = 0; // number of timelevels for out temp. variables
+  const int group = CCTK_GroupIndex(CCTK_THORNSTRING "::reflevelseen");
+  int ierr = CCTK_GroupStorageDecrease(cctkGH, 1, &group, &timelevels, NULL);
+  if(ierr < 0)
+  {
+    CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+               "Could not deallocate storage for '%s', error = %d",
+               CCTK_THORNSTRING "::reflevelseen", ierr);
+  }
+  varseen.clear();
 }
 
 // interpolate a HDF5 patch onto all Carpet patches that overlap
@@ -102,11 +128,31 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 {
   DECLARE_CCTK_PARAMETERS;
 
+  // keep track of temporary storage associated with each variable
+  if(!varseen.count(varindex)) {
+    // allocate storage for temp workspace
+    const int timelevels = int(varseen.size()+1);
+    const int group = CCTK_GroupIndex(CCTK_THORNSTRING "::reflevelseen");
+    int ierr = CCTK_GroupStorageIncrease(cctkGH, 1, &group, &timelevels, NULL);
+    if(ierr < 0)
+    {
+      CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+                 "Could not allocate storage for '%s', error = %d",
+                 CCTK_THORNSTRING "::reflevelseen", ierr);
+    }
+    varseen[varindex] = timelevels-1;
+    ClearRefLevelSeen(cctkGH, varseen[varindex]);
+  }
+
   //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
         DECLARE_CCTK_ARGUMENTS;
+        CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
+          CCTK_VarDataPtr(cctkGH, varseen[varindex],
+                          CCTK_THORNSTRING "::reflevelseen"));
+        assert(myreflevelseen);
 
         CCTK_REAL *xyz[3] = {x,y,z};
         // region for which we have enough inner and ghost points to interpolate,
@@ -169,7 +215,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
             }
           }
 
-          if(reflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
+          if(myreflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
              xmin[0]-epsilon <= xL && xL-epsilon <= xmax[0] &&
              xmin[1]-epsilon <= yL && yL-epsilon <= xmax[1] &&
              xmin[2]-epsilon <= zL && zL-epsilon <= xmax[2])
@@ -208,7 +254,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
             {
               npoints -= 1; // push/pop logic, must be before access
               outvardata[idx] = interp_data[npoints];
-              reflevelseen[idx] = reflevel;
+              myreflevelseen[idx] = reflevel;
               if(verbosity >= 10 || (verbosity >= 9 && npoints % (1 + npoints / 10) == 0))
               {
                 CCTK_VInfo(CCTK_THORNSTRING, "received value %g for point (%g,%g,%g) source level %d",
@@ -272,3 +318,29 @@ static void DoInterpolate(size_t npoints,
 
   Util_TableDestroy(param_table_handle);
 }
+
+/********************************************************************
+ *********************     Internal Routines   **********************
+ ********************************************************************/
+
+// set all seen refinement level data to -1 so that the coarsest on triggers
+static void ClearRefLevelSeen(const cGH * cctkGH, const int timelevel)
+{
+  //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
+    BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
+      BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
+
+        DECLARE_CCTK_ARGUMENTS;
+        CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
+          CCTK_VarDataPtr(cctkGH, timelevel,
+                          CCTK_THORNSTRING "::reflevelseen"));
+        assert(myreflevelseen);
+
+        for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
+          myreflevelseen[idx] = -1;
+
+      } END_LOCAL_COMPONENT_LOOP;
+    } END_LOCAL_MAP_LOOP;
+  //} END_REFLEVEL_LOOP;
+}
+

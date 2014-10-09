@@ -559,7 +559,6 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
   DECLARE_CCTK_ARGUMENTS;
 
   const char * groups[] = {
-    CCTK_THORNSTRING "::reflevelseen",
     CCTK_THORNSTRING "::interpthispoint",
     CCTK_THORNSTRING "::interp_coords",
   };
@@ -578,7 +577,6 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
                    groups[i], ierr);
       }
     }
-    ReadInterpolate_ClearRefLevelSeen(cctkGH); // needs to be a C++ function
   }
 
   varsread = calloc(CCTK_NumVars(), sizeof(*varsread));
@@ -678,22 +676,8 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
     }
   }
 
-  // free storage for temp workspace
-  {
-    ReadInterpolate_CheckAllPointsSet(cctkGH);
-    for(int i = 0 ; i < DIM(groups) ; i++)
-    {
-      const int timelevels = 0; // number of timelevels for out temp. variables
-      const int group = CCTK_GroupIndex(groups[i]);
-      int ierr = CCTK_GroupStorageDecrease(cctkGH, 1, &group, &timelevels, NULL);
-      if(ierr < 0)
-      {
-        CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                   "Could not deallocate storage for '%s', error = %d",
-                   groups[i], ierr);
-      }
-    }
-  }
+  // warn if any variable was not completely set
+  ReadInterpolate_CheckAllPointsSet(cctkGH);
 
   free(varsread), varsread = NULL;
 }
