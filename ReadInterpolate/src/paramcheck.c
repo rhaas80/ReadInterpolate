@@ -88,7 +88,7 @@ void ReadInterpolate_ParamCheck(CCTK_ARGUMENTS)
         }
       }
 
-      if(any_matched) // never matched
+      if(!any_matched) // never matched
       {
         allmatched = 0;
         CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
