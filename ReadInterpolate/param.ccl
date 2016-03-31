@@ -68,6 +68,12 @@ BOOLEAN undo_rot90 "interpolate from 90 degree wedge onto larger domain"
 {
 } "no"
 
+# enforcing the symmetry is done by selecting each group in which a variable
+# was read for the "none" bc and applying the BC afterwards
+BOOLEAN enforce_symmetries_after_reading "apply symmetry boundary conditions after reading data"
+{
+} "no"
+
 ## misc option
 ##
 

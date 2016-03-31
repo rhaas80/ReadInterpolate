@@ -11,3 +11,13 @@ CCTK_REAL interp_coords TYPE=gf TAGS='Checkpoint="no" Prolongation="none"'
 {
   interp_x, interp_y, interp_z, interp_data
 } "coordinate arrays for the interpolator"
+
+#########################################
+###  Aliased functions from Boundary  ###
+#########################################
+
+CCTK_INT FUNCTION Boundary_SelectGroupForBCI(CCTK_POINTER_TO_CONST IN GH, \
+  CCTK_INT IN faces, CCTK_INT IN boundary_width, CCTK_INT IN table_handle, \
+  CCTK_INT IN group_index, CCTK_STRING IN bc_name)
+
+USES FUNCTION Boundary_SelectGroupForBCI

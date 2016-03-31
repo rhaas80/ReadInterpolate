@@ -11,6 +11,7 @@
 #include "cctk.h"
 #include "cctk_Parameters.h"
 #include "cctk_Arguments.h"
+#include "cctk_Functions.h"
 #include "cctk_GNU.h" // for regex.h
 
 #include "util_String.h"
@@ -683,3 +684,46 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
 }
 
 
+// scheduled routine, doesn't really do very much
+void ReadInterpolate_EnforceSymmetry(CCTK_ARGUMENTS)
+{
+  DECLARE_CCTK_PARAMETERS;
+  DECLARE_CCTK_ARGUMENTS;
+
+  int failedtoapplysymmetries = 0;
+  const int numgroups = CCTK_NumGroups();
+  for(int groupindex = 0 ; groupindex < numgroups ; groupindex++)
+  {
+    const int firstvaringroup = CCTK_FirstVarIndexI(groupindex);
+    const int numvars = CCTK_NumVarsInGroupI(groupindex);
+    for(int varindex = 0 ; varindex < numvars ; varindex++)
+    {
+      if(varsread[firstvaringroup+varindex])
+      {
+        // TODO: use boundary width rather than ghost width
+        const int ierr = Boundary_SelectGroupForBCI(cctkGH, CCTK_ALL_FACES, cctk_nghostzones[0], -1, groupindex, "none");
+        if(!ierr)
+        {
+          CCTK_SyncGroupI(cctkGH, groupindex);
+        }
+        else
+        {
+          failedtoapplysymmetries = 1;
+          char * fullname = CCTK_FullName(firstvaringroup+varindex);
+          assert(fullname);
+          CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                     "Failed to select symmetry condition for group containing '%s'",
+                     fullname);
+          free(fullname), fullname = NULL;
+        }
+        break; // only need to select bc once per group
+      }
+    }
+  }
+  if(failedtoapplysymmetries)
+  {
+    CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+               "Some symmetry conditions could not be enforced.");
+    return; // NOTREACHED
+  }
+}
