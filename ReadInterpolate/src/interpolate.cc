@@ -121,7 +121,8 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
 }
 
 // interpolate a HDF5 patch onto all Carpet patches that overlap
-void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int component, int reflevel,
+void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
+                                 int timelevel, int component, int reflevel,
                                  int varindex, const CCTK_INT lsh[3], const CCTK_REAL origin[3],
                                  const CCTK_REAL delta[3], 
                                  CCTK_REAL const * const vardata, void *token)
@@ -184,7 +185,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration, int componen
 
         CCTK_REAL * outvardata;  // pointer to output variable data
        
-        outvardata = static_cast<CCTK_REAL*>(CCTK_VarDataPtrI(cctkGH, 0, varindex));
+        outvardata = static_cast<CCTK_REAL*>(CCTK_VarDataPtrI(cctkGH, timelevel, varindex));
         if(outvardata == NULL)
         {
           CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,

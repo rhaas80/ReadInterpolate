@@ -340,7 +340,7 @@ static int UseThisDataset(hid_t from, const char *objectname)
   if(ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map, &reflevel, &component))
   {
     // skip some reflevels if we already know we won't need them
-    is_desired_patch = (timelevel == 0)               && 
+    is_desired_patch = ((timelevel == 0) || !read_only_timelevel_0) &&
                        (map == 0)                     &&
                        (minimum_reflevel <= reflevel) &&
                        (reflevel <= maximum_reflevel);
@@ -512,8 +512,9 @@ static herr_t ParseObject (hid_t from,
 
     // interpolate onto all overlapping grid patches
     varsread[varindex] = 1;
-    ReadInterpolate_Interpolate(cctkGH, iteration, component, reflevel,
-                                varindex, lsh, origin, delta, vardata, &pd);
+    ReadInterpolate_Interpolate(cctkGH, iteration, timelevel, component,
+                                reflevel, varindex, lsh, origin, delta,
+                                vardata, &pd);
     
     // needs to be after a possible call to PullData!
     CHECK_ERROR (H5Dclose (dataset));
