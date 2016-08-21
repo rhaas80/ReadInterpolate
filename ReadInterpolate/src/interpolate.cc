@@ -3,6 +3,8 @@
 #include <string.h>
 #include <assert.h>
 #include <map>
+#include <iostream>
+#include <sstream>
 
 #include "cctk.h"
 #include "cctk_Arguments.h"
@@ -38,7 +40,7 @@ static varseenmap varseen;
  ********************* Internal Routines  ***************************
  ********************************************************************/
 
-static void ClearRefLevelSeen(const cGH * cctkGH, const int timelevel);
+static void ClearRefLevelSeen(const cGH * cctkGH, const int var);
 
 /********************************************************************
  *********************     External Routines   **********************
@@ -56,7 +58,14 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
       it != end ;
       it++) {
     const int varindex = it->first;
-    const int timelevel = it->second;
+    const int var = it->second;
+
+    // when more variables are requested than I have buffer space, I ignore the
+    // extra ones but abort and inform the user after parsing the files what
+    // the correct number would have been
+    if(var >= max_number_of_read_variables)
+      continue;
+
   //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
     int nunset_points_var = 0;
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
@@ -64,9 +73,13 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
 
         DECLARE_CCTK_ARGUMENTS;
         CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
-          CCTK_VarDataPtr(cctkGH, timelevel,
-                          CCTK_THORNSTRING "::reflevelseen"));
+          CCTK_VarDataPtr(cctkGH, 0,
+                          CCTK_THORNSTRING "::reflevelseen[0]"));
         assert(myreflevelseen);
+        myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
+        assert(cctk_lsh[0] == cctk_ash[0]);
+        assert(cctk_lsh[1] == cctk_ash[1]);
+        assert(cctk_lsh[2] == cctk_ash[2]);
 
         for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
         {
@@ -99,6 +112,23 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
   //} END_REFLEVEL_LOOP;
   }
 
+  if(int(varseen.size()) > max_number_of_read_variables)
+  {
+    std::ostringstream buf;
+    for(varseenmap::const_iterator it = varseen.begin(), end = varseen.end() ;
+        it != end ;
+        it++) {
+      const int varindex = it->first;
+      const int var = it->second;
+      if(var >= max_number_of_read_variables)
+        buf << " " << CCTK_FullVarName(varindex);
+    }
+    CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+               "Not enough scratch space was allocated to record what was read. max_number_of_read_variables was set to %d but at least %d variables were read. The variables that could not be read properly are:%s.",
+               max_number_of_read_variables, int(varseen.size()), buf.str().c_str());
+    return; // NOTREACHED
+  }
+
   if(nunset_points > 0)
   {
     CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
@@ -129,21 +159,30 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
 {
   DECLARE_CCTK_PARAMETERS;
 
+  // make sure there is storage for temp workspace
+  const int timelevels = 1; // number of timelevels for out temp. variables
+  const int group = CCTK_GroupIndex(CCTK_THORNSTRING "::reflevelseen");
+  int ierr = CCTK_GroupStorageIncrease(cctkGH, 1, &group, &timelevels, NULL);
+  if(ierr < 0)
+  {
+    CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+               "Could not allocate storage for '%s', error = %d",
+               CCTK_THORNSTRING "::reflevelseen", ierr);
+  }
+
   // keep track of temporary storage associated with each variable
   if(!varseen.count(varindex)) {
     // allocate storage for temp workspace
-    const int timelevels = int(varseen.size()+1);
-    const int group = CCTK_GroupIndex(CCTK_THORNSTRING "::reflevelseen");
-    int ierr = CCTK_GroupStorageIncrease(cctkGH, 1, &group, &timelevels, NULL);
-    if(ierr < 0)
-    {
-      CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                 "Could not allocate storage for '%s', error = %d",
-                 CCTK_THORNSTRING "::reflevelseen", ierr);
-    }
-    varseen[varindex] = timelevels-1;
-    ClearRefLevelSeen(cctkGH, varseen[varindex]);
+    const int var = int(varseen.size());
+    varseen[varindex] = var;
+    // when more variables are requested than I have buffer space, I ignore the
+    // extra ones but abort and inform the user after parsing the files what
+    // the correct number would have been
+    if(varseen[varindex] < max_number_of_read_variables)
+      ClearRefLevelSeen(cctkGH, varseen[varindex]);
   }
+  if(varseen[varindex] >= max_number_of_read_variables)
+    return;
 
   //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
@@ -151,9 +190,14 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
 
         DECLARE_CCTK_ARGUMENTS;
         CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
-          CCTK_VarDataPtr(cctkGH, varseen[varindex],
-                          CCTK_THORNSTRING "::reflevelseen"));
+          CCTK_VarDataPtr(cctkGH, 0,
+                          CCTK_THORNSTRING "::reflevelseen[0]"));
         assert(myreflevelseen);
+        myreflevelseen += varseen[varindex] * cctk_ash[0] * cctk_ash[1] *
+                          cctk_ash[2];
+        assert(cctk_lsh[0] == cctk_ash[0]);
+        assert(cctk_lsh[1] == cctk_ash[1]);
+        assert(cctk_lsh[2] == cctk_ash[2]);
 
         CCTK_REAL *xyz[3] = {x,y,z};
         // region for which we have enough inner and ghost points to interpolate,
@@ -185,7 +229,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
 
         CCTK_REAL * outvardata;  // pointer to output variable data
        
-        outvardata = static_cast<CCTK_REAL*>(CCTK_VarDataPtrI(cctkGH, timelevel, varindex));
+        outvardata = static_cast<CCTK_REAL*>(CCTK_VarDataPtrI(cctkGH, 0, varindex));
         if(outvardata == NULL)
         {
           CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
@@ -325,17 +369,25 @@ static void DoInterpolate(size_t npoints,
  ********************************************************************/
 
 // set all seen refinement level data to -1 so that the coarsest on triggers
-static void ClearRefLevelSeen(const cGH * cctkGH, const int timelevel)
+static void ClearRefLevelSeen(const cGH * cctkGH, const int var)
 {
+  DECLARE_CCTK_PARAMETERS;
+
+  assert(var < max_number_of_read_variables);
+
   //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
         DECLARE_CCTK_ARGUMENTS;
         CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
-          CCTK_VarDataPtr(cctkGH, timelevel,
-                          CCTK_THORNSTRING "::reflevelseen"));
+          CCTK_VarDataPtr(cctkGH, 0,
+                          CCTK_THORNSTRING "::reflevelseen[0]"));
         assert(myreflevelseen);
+        myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
+        assert(cctk_lsh[0] == cctk_ash[0]);
+        assert(cctk_lsh[1] == cctk_ash[1]);
+        assert(cctk_lsh[2] == cctk_ash[2]);
 
         for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
           myreflevelseen[idx] = -1;

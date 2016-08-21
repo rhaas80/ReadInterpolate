@@ -61,7 +61,8 @@ static void read_real_attr(hid_t from, const char *attrname, int nelems,
                            CCTK_REAL *data);
 static char *trim(char *s);
 
-static int UseThisDataset(hid_t from, const char *objectsname);
+static int UseThisDataset(hid_t from, const char *objectsname,
+                          const int current_timelevel);
 static int ParseDatasetNameTags(const char *objectsname, char *varname, 
                                 int *iteration, int *timelevel, int *map,
                                 int *reflevel, int *component);
@@ -315,7 +316,8 @@ static int MatchDatasetAgainstRegex(const char *objectname)
 // * the user specified given regex
 // * the list of existing Cactus variables
 // TODO: move into function of its own
-static int UseThisDataset(hid_t from, const char *objectname)
+static int UseThisDataset(hid_t from, const char *objectname,
+                          const int current_timelevel)
 {
   DECLARE_CCTK_PARAMETERS;
 
@@ -340,7 +342,9 @@ static int UseThisDataset(hid_t from, const char *objectname)
   if(ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map, &reflevel, &component))
   {
     // skip some reflevels if we already know we won't need them
-    is_desired_patch = ((timelevel == 0) || !read_only_timelevel_0) &&
+    is_desired_patch = ((timelevel == 0) ||
+                        (!read_only_timelevel_0 &&
+                         current_timelevel == timelevel)) &&
                        (map == 0)                     &&
                        (minimum_reflevel <= reflevel) &&
                        (reflevel <= maximum_reflevel);
@@ -401,6 +405,7 @@ static herr_t ParseObject (hid_t from,
   DECLARE_CCTK_PARAMETERS;
 
   char varname[1042];
+  const int current_timelevel = GetTimeLevel(cctkGH);
   int iteration, reflevel, component, timelevel, map, varindex;
   CCTK_INT lsh[3], map_is_cartesian;
   CCTK_REAL delta[DIM(lsh)], origin[DIM(lsh)];
@@ -409,7 +414,7 @@ static herr_t ParseObject (hid_t from,
   if(verbosity >= 3)
     CCTK_VInfo(CCTK_THORNSTRING, "Checking out dataset '%s'", objectname);
 
-  if(UseThisDataset(from, objectname))
+  if(UseThisDataset(from, objectname, current_timelevel))
   {
     hsize_t dims[DIM(lsh)], ndims, objectsize;
     hid_t dataset, dataspace, datatype;

@@ -97,6 +97,7 @@ HydroBase::initial_hydro = "zero"
 IO::filereader_ID_dir = "../../../arrangements/Zelmani/ReadInterpolate/test/tov_write"
 #IO::filereader_ID_dir = "tov_write"
 ReadInterpolate::files = "alp rho"
+ReadInterpolate::max_number_of_read_variables = 2
 ReadInterpolate::verbosity = 0
 ReadInterpolate::interpolator_name = "Lagrange polynomial interpolation"
 ReadInterpolate::interpolator_pars = "order=1 boundary_off_centering_tolerance={1e-12 1e-12 1e-12 1e-12 1e-12 1e-12} boundary_extrapolation_tolerance={1e-12 1e-12 1e-12 1e-12 1e-12 1e-12}"

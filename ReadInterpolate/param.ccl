@@ -25,6 +25,11 @@ STRING only_these_datasets "comma separated list of dataset regular expression p
   ":g[xyz][xyz],:rho"              :: "metric and rho everywhere"
 } ".*"
 
+CCTK_INT max_number_of_read_variables "how many variables will be read in?"
+{
+  1:* :: "any positive number"
+} 1
+
 INT minimum_reflevel "ignore any datasets with refinement level less than this"
 {
   0:* :: "minimum refinement level to keep"
