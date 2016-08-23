@@ -353,7 +353,8 @@ static int UseThisDataset(hid_t from, const char *objectname,
     }
 
     // skip some reflevels if we already know we won't need them
-    is_desired_patch = (map == 0)                     &&
+    is_desired_patch = use_this_timelevel             &&
+                       (map == 0)                     &&
                        (minimum_reflevel <= reflevel) &&
                        (reflevel <= maximum_reflevel);
 
