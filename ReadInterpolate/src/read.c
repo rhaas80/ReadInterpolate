@@ -341,11 +341,18 @@ static int UseThisDataset(hid_t from, const char *objectname,
   is_real = 0;
   if(ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map, &reflevel, &component))
   {
+    const int use_this_timelevel = read_only_timelevel_0 ?
+                                    timelevel == 0 :
+                                    current_timelevel == timelevel;
+    if(verbosity >= 4)
+    {
+      CCTK_VInfo(CCTK_THORNSTRING, "Tested that '%s' should be read for timelevel %d: %s",
+                 objectname, current_timelevel,
+                 use_this_timelevel ? "yes" : "no");
+    }
+
     // skip some reflevels if we already know we won't need them
-    is_desired_patch = ((timelevel == 0) ||
-                        (!read_only_timelevel_0 &&
-                         current_timelevel == timelevel)) &&
-                       (map == 0)                     &&
+    is_desired_patch = (map == 0)                     &&
                        (minimum_reflevel <= reflevel) &&
                        (reflevel <= maximum_reflevel);
 
