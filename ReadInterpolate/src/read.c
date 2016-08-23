@@ -235,15 +235,16 @@ static int ParseDatasetNameTags(const char *objectname, char *varname,
     offset += nread;
     for(int i = 0 ; i < DIM(tagvals) ; i++)
     {
-      int didmatch;
-      if((didmatch = sscanf(objectname+offset, tagvals[i].tag, tagvals[i].val, &nread)) == 1)
+      const char *coda = objectname+offset;
+      const int didmatch = sscanf(coda, tagvals[i].tag, tagvals[i].val, &nread) == 1;
+      if(didmatch)
         offset += nread;
       else
         *tagvals[i].val = 0;
       if(verbosity >= 5)
       {
         CCTK_VInfo(CCTK_THORNSTRING, "Testing dataset name coda '%s' against tag '%s': found %smatch and will use value %d",
-                    objectname+offset-didmatch*nread, tagvals[i].tag, didmatch?"":"no ", *tagvals[i].val);
+                    coda, tagvals[i].tag, didmatch?"":"no ", *tagvals[i].val);
       }
     }
     retval = (objectname[offset] == '\0'); // was there any leftover stuff we could not identify?
@@ -362,7 +363,7 @@ static int UseThisDataset(hid_t from, const char *objectname,
       is_known_variable = 1;
       if(verbosity >= 4)
       {
-        CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s': match", objectname);
+        CCTK_VInfo(CCTK_THORNSTRING, "Tested that '%s' is a known variable: yes", objectname);
       }
       is_gf = CCTK_GroupTypeFromVarI(varindex) == CCTK_GF;
       is_real = CCTK_VarTypeI(varindex) == CCTK_VARIABLE_REAL;
