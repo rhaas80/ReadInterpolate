@@ -201,7 +201,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
 
         CCTK_REAL *xyz[3] = {x,y,z};
         // region for which we have enough inner and ghost points to interpolate,
-        // assuming the interpolator needs cctk_nghostzones ghosts 
+        // assuming the interpolator needs nghostzones ghosts
         // we allow usage of one sided interpolation at outer boundaries and
         // symmetry boundaries, where we have no other choice
         // NOTE: this will give unexpected results should the read in data
@@ -211,6 +211,13 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
         // datasets appear in the file. The HDF5 files have cctk_bbox attribute
         // however I suspect it to not be trustworthy once we start merging
         // files or use the slicer to get data out of files.
+        int nghostzones[6];
+        for(int i = 0 ; i < 6 ; i++) {
+          if(interpolator_half_width == -1)
+            nghostzones[i] = cctk_nghostzones[i];
+          else
+            nghostzones[i] = interpolator_half_width;
+        }
         int require_ghosts[6];
         for(int d = 0 ; d < 3 ; d++) { // allow one side interpolation if read in patch covers outer boundary
           int ijk[3] = {0,0,0};
@@ -220,12 +227,12 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
           require_ghosts[2*d+0] = !(origin[d] <= xyzmin && cctk_bbox[2*d+0]);
           require_ghosts[2*d+1] = !(origin[d]+(lsh[d]-1)*delta[d] >= xyzmax && cctk_bbox[2*d+1]);
         }
-        CCTK_REAL xmin[3] = {origin[0]+require_ghosts[0]*(cctk_nghostzones[0]-1)*delta[0],
-                             origin[1]+require_ghosts[2]*(cctk_nghostzones[1]-1)*delta[1],
-                             origin[2]+require_ghosts[4]*(cctk_nghostzones[2]-1)*delta[2]};
-        CCTK_REAL xmax[3] = {origin[0]+(lsh[0]-1-require_ghosts[1]*(cctk_nghostzones[0]-1))*delta[0],
-                             origin[1]+(lsh[1]-1-require_ghosts[3]*(cctk_nghostzones[1]-1))*delta[1],
-                             origin[2]+(lsh[2]-1-require_ghosts[5]*(cctk_nghostzones[2]-1))*delta[2]};
+        CCTK_REAL xmin[3] = {origin[0]+require_ghosts[0]*(nghostzones[0]-1)*delta[0],
+                             origin[1]+require_ghosts[2]*(nghostzones[1]-1)*delta[1],
+                             origin[2]+require_ghosts[4]*(nghostzones[2]-1)*delta[2]};
+        CCTK_REAL xmax[3] = {origin[0]+(lsh[0]-1-require_ghosts[1]*(nghostzones[0]-1))*delta[0],
+                             origin[1]+(lsh[1]-1-require_ghosts[3]*(nghostzones[1]-1))*delta[1],
+                             origin[2]+(lsh[2]-1-require_ghosts[5]*(nghostzones[2]-1))*delta[2]};
 
         CCTK_REAL * outvardata;  // pointer to output variable data
        

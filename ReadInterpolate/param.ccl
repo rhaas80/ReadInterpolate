@@ -70,6 +70,13 @@ REAL epsilon "Tolerance when deciding if a grid point lies within an overlap reg
  0:* :: "any positive number, should be similar to AEILocalInterp's tolerance"
 } 1e-12
 
+INT interpolator_half_width "maximum number of points to one side of the interpolated location the interpolator uses"
+{
+   1:* :: "this is similar to cctk_ghostzones, 1 for linear and constant interpolation"
+   2:* :: "2nd for second order and 3rd interpolation"
+  -1   :: "use cctk_nghostzones"
+} -1
+
 # The above makes sure that the interpolator doesn't off-centre the
 # interpolation stencil if there are insufficient points to
 # interpolate, which can happen if there are insufficient ghost-zones
