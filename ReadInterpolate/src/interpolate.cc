@@ -159,14 +159,6 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
 {
   DECLARE_CCTK_PARAMETERS;
 
-  const int current_reflevel = GetRefinementLevel(cctkGH);
-  const int current_timelevel = GetTimeLevel(cctkGH);
-  // for tl != 0 the different rl are not aligned in time so we only want to
-  // use the same rl as we are currently on
-  // RH: this is not generally possible
-  if(current_reflevel != reflevel && current_timelevel != 0)
-    return;
-
   // make sure there is storage for temp workspace
   const int timelevels = 1; // number of timelevels for out temp. variables
   const int group = CCTK_GroupIndex(CCTK_THORNSTRING "::reflevelseen");
@@ -190,6 +182,14 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
       ClearRefLevelSeen(cctkGH, varseen[varindex]);
   }
   if(varseen[varindex] >= max_number_of_read_variables)
+    return;
+
+  const int current_reflevel = GetRefinementLevel(cctkGH);
+  const int current_timelevel = GetTimeLevel(cctkGH);
+  // for tl != 0 the different rl are not aligned in time so we only want to
+  // use the same rl as we are currently on
+  // RH: this is not generally possible
+  if(current_reflevel != reflevel && current_timelevel != 0)
     return;
 
   //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
