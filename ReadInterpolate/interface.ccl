@@ -31,3 +31,9 @@ CCTK_INT FUNCTION                         \
         (CCTK_POINTER_TO_CONST IN cctkGH)
 
 USES FUNCTION GetTimeLevel
+
+CCTK_INT FUNCTION                         \
+    GetRefinementLevel                    \
+        (CCTK_POINTER_TO_CONST IN cctkGH)
+
+USES FUNCTION GetRefinementLevel
