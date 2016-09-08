@@ -416,6 +416,7 @@ static herr_t ParseObject (hid_t from,
   char varname[1042];
   const int current_timelevel = GetTimeLevel(cctkGH);
   int iteration, reflevel, component, timelevel, map, varindex;
+  CCTK_REAL time;
   CCTK_INT lsh[3], map_is_cartesian;
   CCTK_REAL delta[DIM(lsh)], origin[DIM(lsh)];
   CCTK_REAL * vardata;
@@ -524,10 +525,12 @@ static herr_t ParseObject (hid_t from,
       }
     }
 
+    read_real_attr(dataset, "time", 1, &time);
+
     // interpolate onto all overlapping grid patches
     varsread[varindex] = 1;
     ReadInterpolate_Interpolate(cctkGH, iteration, timelevel, component,
-                                reflevel, varindex, lsh, origin, delta,
+                                reflevel, time, varindex, lsh, origin, delta,
                                 vardata, &pd);
     
     // needs to be after a possible call to PullData!

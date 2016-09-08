@@ -6,6 +6,8 @@ USES INCLUDE HEADER: carpet.hh
 
 CCTK_INT reflevelseen[max_number_of_read_variables] TIMELEVELS=1 TYPE=gf TAGS='Checkpoint="no" Prolongation="none"' "highest refinement level in source data that overlaps this point so far"
 CCTK_INT interpthispoint TYPE=gf TAGS='Checkpoint="no" Prolongation="none"' "fill this point this time around"
+# technically this should be time[max_number_of_read_variables (maybe...)
+CCTK_REAL timeread TIMELEVELS=3 TYPE=gf TAGS=='Checkpoint="no" Prolongation="none"' "time of dataset used to file this grid point"
 
 CCTK_REAL interp_coords TYPE=gf TAGS='Checkpoint="no" Prolongation="none"'
 {
