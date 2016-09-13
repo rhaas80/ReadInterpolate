@@ -488,6 +488,22 @@ static herr_t ParseObject (hid_t from,
 
       read_real_attr(dataset, "origin", 3, origin);
       read_real_attr(dataset, "delta", 3, delta);
+      // Carpet has a bug where origin is incorrect for cell centered data,
+      // fix this here
+      {
+        int iorigin[3], ioffset[3], ioffsetdenom[3];
+        read_int_attr(dataset, "iorigin", 3, iorigin);
+        read_int_attr(dataset, "ioffset", 3, ioffset);
+        read_int_attr(dataset, "ioffsetdenom", 3, ioffsetdenom);
+        if(ioffset[0] != 0)
+        {
+          for(int i = 0; i < 3 ; i++)
+          {
+            origin[i] = delta[i] * (iorigin[i] +
+                                    (double)ioffset[i]/ioffsetdenom[i]);
+          }
+        }
+      }
 
       for(int i = 0 ; i < 3 ; i++)
         origin[i] += shift_read_datasets_by[i];
