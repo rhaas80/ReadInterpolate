@@ -47,6 +47,16 @@ BOOLEAN read_only_timelevel_0 "read only t=0 from files"
 {
 } "yes"
 
+## Some Carpet version contain a bug and do not set "origin" correctly for cell
+# centered grids (it is off by half a grid point, ie it does not take the
+# staggering into account). This option fixes this issue by offsetting all
+# datasets that should be offset. This is WRONG for files where Carpet already
+# used the correct "origin".
+# This parameter ONLY affects cell centered INPUT data.
+BOOLEAN fix_cell_centered_origins "offset rl>1 cell centered input data by half a grid step to fix broken HDF5 files"
+{
+} "no"
+
 ## Interpolator and patch placement option
 ##
 

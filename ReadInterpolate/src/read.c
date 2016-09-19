@@ -490,18 +490,21 @@ static herr_t ParseObject (hid_t from,
       read_real_attr(dataset, "delta", 3, delta);
       // Carpet has a bug where origin is incorrect for cell centered data,
       // fix this here
+      // unfortunatly there is no foolproof way to detect is a givne HDF5 file
+      // was written using the old incorrect code or just has strange setting
+      // for the origin of the grid. Eg. for "normal" grids that are symmetric
+      // around the origin and have an even number of cells, the origin
+      // coordinate is always given by origin = delta * (i + 0.5) where i is
+      // some integer. However nothing stops a user from offsetting their grid
+      // by half a step thus adding just such an offset.
+      if(fix_cell_centered_origins)
       {
-        int iorigin[3], ioffset[3], ioffsetdenom[3];
-        read_int_attr(dataset, "iorigin", 3, iorigin);
+        int ioffset[3], ioffsetdenom[3];
         read_int_attr(dataset, "ioffset", 3, ioffset);
         read_int_attr(dataset, "ioffsetdenom", 3, ioffsetdenom);
-        if(ioffset[0] != 0)
+        for(int i = 0; i < 3 ; i++)
         {
-          for(int i = 0; i < 3 ; i++)
-          {
-            origin[i] = delta[i] * (iorigin[i] +
-                                    (double)ioffset[i]/ioffsetdenom[i]);
-          }
+          origin[i] += delta[i] * ((double)ioffset[i]/ioffsetdenom[i]);
         }
       }
 
