@@ -23,13 +23,45 @@
 /********************************************************************
  *********************     Local Data Types   ***********************
  ********************************************************************/
+
+/* we cache the datasets in the files after having iterated over them once so
+ * that we don't iterate over and over again */
+typedef int ivect[3];
+
+struct patch {
+  struct patch * next;
+  char * patchname;
+  int vindex;
+  int map;
+  int reflevel;
+  int timestep;
+  int timelevel;
+  int component;
+  hsize_t rank;
+  int lsh[3];
+  double time;
+  double origin[3];
+  double delta[3];
+  hid_t datatype;
+  hsize_t objectsize;
+  int cached; // all member variables are valid
+};
+typedef struct patch patch_t;
+
+// structure describing the contents of an HDF5 file to read from
+struct file {
+  struct file * next;
+  char * filename;
+  patch_t * patches;
+};
+typedef struct file file_t;
+
 struct pulldata
 {
   CCTK_INT hasbeenread;    // only read data once
-  const char * objectname; // name of HDF5 dataset
   CCTK_REAL * vardata;     // a buffer suffiently large to hold all data
-  hid_t dataset;           // dataset that hold the data
-  hid_t datatype;          // data type of variable (must be REAL)
+  hid_t from;              // HDF5 group (file) containing patch
+  const patch_t * patch;   // dataset that hold the data
 };
 
 #define METADATA_GROUP "Parameters and Global Attributes"
@@ -41,6 +73,7 @@ struct pulldata
  ********************************************************************/
 static int regexmatchedsomething[MAX_N_REGEX];
 static int * varsread = NULL;
+static file_t * filecache = NULL;
 
 /********************************************************************
  ********************* Other Routine Prototypes *********************
@@ -61,8 +94,10 @@ static void read_real_attr(hid_t from, const char *attrname, int nelems,
                            CCTK_REAL *data);
 static char *trim(char *s);
 
-static int UseThisDataset(hid_t from, const char *objectsname,
-                          const int current_timelevel);
+static herr_t ParseObject (hid_t from, const char *objectname, void *calldata);
+static patch_t *RecordGFPatch(hid_t from, const char *objectname);
+static void HandleDataset(hid_t from, const patch_t *patch, cGH *cctkGH);
+static int UseThisDataset(const patch_t *patch, const int current_timelevel);
 static int ParseDatasetNameTags(const char *objectsname, char *varname, 
                                 int *iteration, int *timelevel, int *map,
                                 int *reflevel, int *component);
@@ -312,249 +347,254 @@ static int MatchDatasetAgainstRegex(const char *objectname)
   return retval;
 }
 
+// inspect dataset and create patch structure for it if it is a grid function
+// dataset for a grid function Cactus knows about
+static patch_t *RecordGFPatch(hid_t from, const char *objectname)
+{
+  DECLARE_CCTK_PARAMETERS;
+
+  patch_t *patch = NULL;
+
+  H5G_stat_t object_info;
+  CHECK_ERROR (H5Gget_objinfo (from, objectname, 0, &object_info));
+  if (object_info.type == H5G_DATASET)
+  {
+    char varname[1042];
+    int iteration, timelevel, map, reflevel, component, varindex;
+    // we are interested in datasets only - skip anything else
+    if(ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map, &reflevel, &component))
+    {
+      varindex = CCTK_VarIndex(varname);
+      const int is_gf = (varindex >= 0 && CCTK_GroupTypeFromVarI(varindex) == CCTK_GF);
+      if (is_gf)
+      {
+        if(verbosity >= 4)
+        {
+          CCTK_VInfo(CCTK_THORNSTRING,
+                     "Tested that '%s' is a known grid function: yes",
+                       objectname);
+        }
+
+        // add new dataset to cache
+        // TODO: make this work with objects in subdirs rather than just /
+        patch = calloc(1, sizeof(*patch));
+        patch->patchname = strdup(objectname);
+
+        patch->vindex = varindex;
+        patch->map = map;
+        patch->reflevel = reflevel;
+        patch->timestep = iteration;
+        patch->timelevel = timelevel;
+        patch->component = component;
+
+        hsize_t dims[DIM(patch->lsh)], ndims;
+        hid_t dataset, dataspace;
+
+        CHECK_ERROR (dataset = H5Dopen (from, patch->patchname));
+        CHECK_ERROR (dataspace = H5Dget_space (dataset));
+
+        int typesize, vartype;
+
+        vartype = CCTK_VarTypeI(patch->vindex);
+        assert(vartype >= 0);
+
+        // get storage size for data
+        if(vartype == CCTK_VARIABLE_REAL) {
+          patch->datatype = H5T_NATIVE_DOUBLE;
+          typesize = sizeof(CCTK_REAL);
+        } else if(vartype == CCTK_VARIABLE_INT) {
+          patch->datatype = H5T_NATIVE_INT;
+          typesize = sizeof(CCTK_INT);
+        } else {
+          CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+                      "Do not know how to handle CCTK type class %d", vartype);
+        }
+
+        patch->objectsize = H5Sget_select_npoints (dataspace) * typesize;
+        assert(patch->objectsize > 0);
+
+        // store cctk_lssh and grid structure
+        {
+          CHECK_ERROR (ndims = H5Sget_simple_extent_ndims(dataspace));
+          assert(ndims == DIM(patch->lsh));
+          CHECK_ERROR (H5Sget_simple_extent_dims(dataspace, dims, NULL));
+
+          read_real_attr(dataset, "origin", 3, patch->origin);
+          read_real_attr(dataset, "delta", 3, patch->delta);
+          // Carpet has a bug where origin is incorrect for cell centered data,
+          // fix this here
+          // unfortunatly there is no foolproof way to detect is a givne HDF5 file
+          // was written using the old incorrect code or just has strange setting
+          // for the origin of the grid. Eg. for "normal" grids that are symmetric
+          // around the origin and have an even number of cells, the origin
+          // coordinate is always given by origin = delta * (i + 0.5) where i is
+          // some integer. However nothing stops a user from offsetting their grid
+          // by half a step thus adding just such an offset.
+          if(fix_cell_centered_origins)
+          {
+            int ioffset[3], ioffsetdenom[3];
+            read_int_attr(dataset, "ioffset", 3, ioffset);
+            read_int_attr(dataset, "ioffsetdenom", 3, ioffsetdenom);
+            for(int i = 0; i < 3 ; i++)
+            {
+              patch->origin[i] += patch->delta[i] *
+                                    ((double)ioffset[i]/ioffsetdenom[i]);
+            }
+          }
+
+          for(int i = 0 ; i < 3 ; i++)
+            patch->origin[i] += shift_read_datasets_by[i];
+
+          const int map_is_cartesian = 1;
+#if 0 // TODO: Make something like this work
+          HDF5_BEGIN_TRY {
+            read_int_attr(dataset, "MapIsCartesian", &map_is_cartesian);
+          } HDF5_END_TRY;
+#endif
+          assert(map_is_cartesian); // TODO: support multipatch
+
+          CCTK_INT size = 1;
+          for(int d = 0 ; d < (int)ndims ; d++)
+          {
+            assert ((int)ndims-1-d>=0 && ndims-1-d<ndims);
+            patch->lsh[d] = (CCTK_INT)dims[ndims-1-d]; // HDF5 has the slowest changing direction first, Cactus the fastest
+            size *= patch->lsh[d];
+          }
+          if(size*typesize != (int)patch->objectsize) {
+            CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+                        "Unexpected size %d bytes of dataset '%s' does not agree "
+                        "with size of CCTK_REAL or CCTK_INT dataset (%d).",
+                        (int)patch->objectsize, patch->patchname, size*typesize);
+          }
+
+          if(verbosity >= 3)
+          {
+            CCTK_VInfo(CCTK_THORNSTRING, "Dataset '%s' sizes: origin=(%g,%g,%g), "
+                       "delta=(%g,%g,%g), lsh=(%d,%d,%d), map_is_cartesian=%d, iteration=%d,"
+                       " component=%d, reflevel=%d",
+                       patch->patchname,
+                       patch->origin[0],patch->origin[1],patch->origin[2],
+                       patch->delta[0],patch->delta[1],patch->delta[2],
+                       patch->lsh[0],patch->lsh[1],patch->lsh[2], map_is_cartesian,
+                       patch->timestep, patch->component, patch->reflevel);
+          }
+        }
+
+        read_real_attr(dataset, "time", 1, &patch->time);
+        patch->cached = 1;
+
+        CHECK_ERROR (H5Sclose (dataspace));
+        CHECK_ERROR (H5Dclose (dataset));
+      } // is_gf
+    } // ParseDataSets
+    else
+    {
+      if(verbosity >= 1)
+      {
+        CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                   "Objectname '%s' could not be fully parsed.", objectname);
+      }
+    }
+  }
+
+  return patch;
+}
+
 // check the object name against
 // * any of the known dataset patterns
 // * the user specified given regex
 // * the list of existing Cactus variables
 // TODO: move into function of its own
-static int UseThisDataset(hid_t from, const char *objectname,
-                          const int current_timelevel)
+static int UseThisDataset(const patch_t *patch, const int current_timelevel)
 {
   DECLARE_CCTK_PARAMETERS;
 
-  char varname[1042];
-  int iteration, reflevel, component, timelevel, map, varindex;
+  int retval = 0;
 
-  int matches_regex, is_known_variable, is_desired_patch, is_gf, is_real;
-  int retval;
-
-  // we are interested in datasets only - skip anything else
-  H5G_stat_t object_info;
-  CHECK_ERROR (H5Gget_objinfo (from, objectname, 0, &object_info));
-  if (object_info.type != H5G_DATASET)
-    return 0;
-
-  matches_regex = MatchDatasetAgainstRegex(objectname);
-
-  is_known_variable = 0;
-  is_desired_patch = 0;
-  is_gf = 0;
-  is_real = 0;
-  if(ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map, &reflevel, &component))
+  const int matches_regex = MatchDatasetAgainstRegex(patch->patchname);
+  const int use_this_timelevel = read_only_timelevel_0 ?
+                                 patch->timelevel == 0 :
+                                 current_timelevel == patch->timelevel;
+  if(verbosity >= 4)
   {
-    const int use_this_timelevel = read_only_timelevel_0 ?
-                                    timelevel == 0 :
-                                    current_timelevel == timelevel;
-    if(verbosity >= 4)
-    {
-      CCTK_VInfo(CCTK_THORNSTRING, "Tested that '%s' should be read for timelevel %d: %s",
-                 objectname, current_timelevel,
-                 use_this_timelevel ? "yes" : "no");
-    }
-
-    // skip some reflevels if we already know we won't need them
-    is_desired_patch = use_this_timelevel             &&
-                       (map == 0)                     &&
-                       (minimum_reflevel <= reflevel) &&
-                       (reflevel <= maximum_reflevel);
-
-    varindex = CCTK_VarIndex(varname);
-    if(varindex >= 0)
-    {
-      is_known_variable = 1;
-      if(verbosity >= 4)
-      {
-        CCTK_VInfo(CCTK_THORNSTRING, "Tested that '%s' is a known variable: yes", objectname);
-      }
-      is_gf = CCTK_GroupTypeFromVarI(varindex) == CCTK_GF;
-      is_real = CCTK_VarTypeI(varindex) == CCTK_VARIABLE_REAL;
-    }
-
-    // TODO: handle integer variables
-    if(is_known_variable && matches_regex && is_desired_patch && is_gf &&
-       !is_real)
-    {
-      static char *have_warned = NULL;
-      if(have_warned == NULL)
-      {
-        // calloc initializes to zero
-        have_warned = calloc(CCTK_NumVars(), sizeof(char));
-        assert(have_warned != NULL);
-      }
-      if((verbosity == 1 && !have_warned[varindex]) || verbosity >= 2)
-      {
-        CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                   "Skipping integer variable '%s'. Do not know how to interpolate integers.",
-                   varname);
-        have_warned[varindex] = 1;
-      }
-    }
+    CCTK_VInfo(CCTK_THORNSTRING, "Tested that '%s' should be read for timelevel %d: %s",
+               patch->patchname, current_timelevel,
+               use_this_timelevel ? "yes" : "no");
   }
-  else
+
+  // skip some reflevels if we already know we won't need them
+  const int is_desired_patch = use_this_timelevel             &&
+                               (patch->map == 0)              &&
+                               (minimum_reflevel <= patch->reflevel) &&
+                               (patch->reflevel <= maximum_reflevel);
+
+  const int is_real = CCTK_VarTypeI(patch->vindex) == CCTK_VARIABLE_REAL;
+
+  retval = matches_regex && is_desired_patch && is_real;
+  assert(!retval || patch->cached);
+
+  // TODO: handle integer variables
+  if(!retval && !is_real)
   {
-    if(verbosity >= 1)
+    static char *have_warned = NULL;
+    if(have_warned == NULL)
+    {
+      // calloc initializes to zero
+      have_warned = calloc(CCTK_NumVars(), sizeof(char));
+      assert(have_warned != NULL);
+    }
+    if((verbosity == 1 && !have_warned[patch->vindex]) || verbosity >= 2)
     {
       CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                 "Objectname '%s' could not be fully parsed.", objectname);
+                 "Skipping integer variable '%s'. Do not know how to interpolate integers.",
+                 patch->patchname);
+      have_warned[patch->vindex] = 1;
     }
   }
-
-  retval = is_known_variable && matches_regex && is_desired_patch && is_gf &&
-           is_real;
 
   return retval;
 }
 
 // check if object is a dataset, then read it in and interpolate onto all
 // overlapping grids
-static herr_t ParseObject (hid_t from,
-                          const char *objectname,
-                          void *cctkGH)
+static void HandleDataset(hid_t from, const patch_t *patch, cGH *cctkGH)
 {
   DECLARE_CCTK_PARAMETERS;
 
-  char varname[1042];
   const int current_timelevel = GetTimeLevel(cctkGH);
-  int iteration, reflevel, component, timelevel, map, varindex;
-  CCTK_REAL time;
-  CCTK_INT lsh[3], map_is_cartesian;
-  CCTK_REAL delta[DIM(lsh)], origin[DIM(lsh)];
   CCTK_REAL * vardata;
 
   if(verbosity >= 3)
-    CCTK_VInfo(CCTK_THORNSTRING, "Checking out dataset '%s'", objectname);
+    CCTK_VInfo(CCTK_THORNSTRING, "Checking out dataset '%s'", patch->patchname);
 
-  if(UseThisDataset(from, objectname, current_timelevel))
+  if(UseThisDataset(patch, current_timelevel))
   {
-    hsize_t dims[DIM(lsh)], ndims, objectsize;
-    hid_t dataset, dataspace, datatype;
     struct pulldata pd;
-    int typesize, vartype;
-
-    const int success =
-      ParseDatasetNameTags(objectname, varname, &iteration, &timelevel, &map,
-                             &reflevel, &component);
-    assert(success);
-
-    varindex = CCTK_VarIndex(varname);
-    assert(varindex >= 0);
-
-    vartype = CCTK_VarTypeI(varindex);
-    assert(vartype >= 0);
-
-
-    CHECK_ERROR (dataset = H5Dopen (from, objectname));
-    CHECK_ERROR (dataspace = H5Dget_space (dataset));
 
     if(verbosity >= 2)
-      CCTK_VInfo(CCTK_THORNSTRING, "Using dataset '%s'", objectname);
+      CCTK_VInfo(CCTK_THORNSTRING, "Using dataset '%s'", patch->patchname);
 
-    // get storage for data
-    if(vartype == CCTK_VARIABLE_REAL) {
-      datatype = H5T_NATIVE_DOUBLE;
-      typesize = sizeof(CCTK_REAL);
-    } else if(vartype == CCTK_VARIABLE_INT) {
-      datatype = H5T_NATIVE_INT;
-      typesize = sizeof(CCTK_INT);
-    } else {
-      CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                  "Do not know how to handle CCTK type class %d", vartype);
-    }
-
-    objectsize = H5Sget_select_npoints (dataspace) * typesize;
-    assert(objectsize > 0);
-
-    vardata = malloc (objectsize);
+    vardata = malloc (patch->objectsize);
     if (vardata == NULL)
     {
       CCTK_VError (__LINE__, __FILE__, CCTK_THORNSTRING,
                   "failled to allocate %d bytes of memory for %s, giving up",
-                  (int) objectsize, objectname);
-      return -1; // NOTREACHED
+                  (int) patch->objectsize, patch->patchname);
+      return; // NOTREACHED
     }
 
     // we hold of the actual read until really asked for in PullData
     pd.hasbeenread = 0;
-    pd.objectname = objectname;
     pd.vardata = vardata;
-    pd.dataset = dataset;
-    pd.datatype = datatype;
-
-    // store cctk_lssh and grid structure
-    {
-      CHECK_ERROR (ndims = H5Sget_simple_extent_ndims(dataspace));
-      assert(ndims == DIM(lsh));
-      CHECK_ERROR (H5Sget_simple_extent_dims(dataspace, dims, NULL));
-
-      read_real_attr(dataset, "origin", 3, origin);
-      read_real_attr(dataset, "delta", 3, delta);
-      // Carpet has a bug where origin is incorrect for cell centered data,
-      // fix this here
-      // unfortunatly there is no foolproof way to detect is a givne HDF5 file
-      // was written using the old incorrect code or just has strange setting
-      // for the origin of the grid. Eg. for "normal" grids that are symmetric
-      // around the origin and have an even number of cells, the origin
-      // coordinate is always given by origin = delta * (i + 0.5) where i is
-      // some integer. However nothing stops a user from offsetting their grid
-      // by half a step thus adding just such an offset.
-      if(fix_cell_centered_origins)
-      {
-        int ioffset[3], ioffsetdenom[3];
-        read_int_attr(dataset, "ioffset", 3, ioffset);
-        read_int_attr(dataset, "ioffsetdenom", 3, ioffsetdenom);
-        for(int i = 0; i < 3 ; i++)
-        {
-          origin[i] += delta[i] * ((double)ioffset[i]/ioffsetdenom[i]);
-        }
-      }
-
-      for(int i = 0 ; i < 3 ; i++)
-        origin[i] += shift_read_datasets_by[i];
-
-      map_is_cartesian = 1;
-#if 0 // TODO: Make something like this work
-      HDF5_BEGIN_TRY {
-        read_int_attr(dataset, "MapIsCartesian", &map_is_cartesian);
-      } HDF5_END_TRY;
-#endif
-      assert(map_is_cartesian); // TODO: support multipatch
-
-      CCTK_INT size = 1;
-      for(int d = 0 ; d < (int)ndims ; d++)
-      {
-        assert ((int)ndims-1-d>=0 && ndims-1-d<ndims);
-        lsh[d] = (CCTK_INT)dims[ndims-1-d]; // HDF5 has the slowest changing direction first, Cactus the fastest
-        size *= lsh[d];
-      }
-      if(size*typesize != (int)objectsize) {
-        CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                    "Unexpected size %d bytes of dataset '%s' does not agree "
-                    "with size of CCTK_REAL or CCTK_INT dataset (%d).",
-                    (int)objectsize, objectname, size*typesize);
-      }
-
-      if(verbosity >= 3)
-      {
-        CCTK_VInfo(CCTK_THORNSTRING, "Dataset '%s' sizes: origin=(%g,%g,%g), "
-                   "delta=(%g,%g,%g), lsh=(%d,%d,%d), map_is_cartesian=%d, iteration=%d,"
-                   " component=%d, reflevel=%d",
-                   objectname, origin[0],origin[1],origin[2],
-                   delta[0],delta[1],delta[2], lsh[0],lsh[1],lsh[2], map_is_cartesian,
-                   iteration, component, reflevel);
-      }
-    }
-
-    read_real_attr(dataset, "time", 1, &time);
+    pd.from = from;
+    pd.patch = patch;
 
     // interpolate onto all overlapping grid patches
-    varsread[varindex] = 1;
-    ReadInterpolate_Interpolate(cctkGH, iteration, timelevel, component,
-                                reflevel, time, varindex, lsh, origin, delta,
-                                vardata, &pd);
-    
-    // needs to be after a possible call to PullData!
-    CHECK_ERROR (H5Dclose (dataset));
-    CHECK_ERROR (H5Sclose (dataspace));
+    varsread[patch->vindex] = 1;
+    ReadInterpolate_Interpolate(cctkGH, patch->timestep, patch->timelevel,
+                                patch->component, patch->reflevel, patch->time,
+                                patch->vindex, patch->lsh, patch->origin,
+                                patch->delta, vardata, &pd);
     
     // free data
     assert(vardata);
@@ -564,7 +604,30 @@ static herr_t ParseObject (hid_t from,
   else
   {
     if(verbosity >= 2)
-      CCTK_VInfo(CCTK_THORNSTRING, "Not using dataset '%s' after all.", objectname);
+      CCTK_VInfo(CCTK_THORNSTRING, "Not using dataset '%s' after all.", patch->patchname);
+  }
+}
+
+// check if object is a dataset, then read it in and interpolate onto all
+// overlapping grids
+static herr_t ParseObject (hid_t from, const char *objectname, void *calldata)
+{
+  DECLARE_CCTK_PARAMETERS;
+  file_t * file = ((void**)calldata)[0];
+  void * cctkGH = ((void**)calldata)[1];
+
+  if(verbosity >= 3)
+    CCTK_VInfo(CCTK_THORNSTRING, "Parsing dataset '%s'", objectname);
+
+  patch_t * patch = RecordGFPatch(from, objectname);
+  if(patch != NULL)
+  {
+    if(verbosity >= 3)
+      CCTK_VInfo(CCTK_THORNSTRING, "Recording dataset '%s'", objectname);
+
+    patch->next = file->patches;
+    file->patches = patch;
+    HandleDataset (from, patch, cctkGH);
   }
 
   return 0;
@@ -581,11 +644,15 @@ void ReadInterpolate_PullData(void * token)
 
   if(!pd->hasbeenread)
   {
-    if(verbosity >= 2)
-      CCTK_VInfo(CCTK_THORNSTRING, "Reading data from dataset '%s'", pd->objectname);
+    hid_t dataset;
 
-    CHECK_ERROR (H5Dread (pd->dataset, pd->datatype, H5S_ALL, H5S_ALL,
+    if(verbosity >= 2)
+      CCTK_VInfo(CCTK_THORNSTRING, "Reading data from dataset '%s'", pd->patch->patchname);
+
+    CHECK_ERROR (dataset = H5Dopen (pd->from, pd->patch->patchname));
+    CHECK_ERROR (H5Dread (dataset, pd->patch->datatype, H5S_ALL, H5S_ALL,
                           H5P_DEFAULT, pd->vardata));
+    CHECK_ERROR (H5Dclose (dataset));
     pd->hasbeenread = 1;
   }
 }
@@ -651,13 +718,40 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
 
           if(verbosity >= 1)
             CCTK_VInfo(CCTK_THORNSTRING, "Reading datasets from file '%s'", full_fn);
-          
+
           CHECK_ERROR (fh = H5Fopen (full_fn, H5F_ACC_RDONLY, H5P_DEFAULT));
-          CHECK_ERROR (H5Giterate (fh, "/", NULL, ParseObject, cctkGH));
-          if(verbosity >= 1 && H5Fget_obj_count(fh, H5F_OBJ_ALL) > 1)
+
+          // find cached file content if it exists or set up new one otherwise
+          file_t * file = NULL;
+          for(file = filecache ; file != NULL ; file = file->next)
           {
-            CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                       "Leaked %d HDF5 objects when parsing file '%s'.", (int)H5Fget_obj_count(fh, H5F_OBJ_ALL) - 1, fn);
+            if(strcmp(full_fn, file->filename) == 0)
+              break;
+          }
+
+          if(file == NULL)
+          {
+            file = calloc(1, sizeof(*file));
+            file->filename = strdup(full_fn);
+            file->next = filecache;
+            filecache = file;
+
+            void *calldata[2] = {file, cctkGH};
+            CHECK_ERROR (H5Giterate (fh, "/", NULL, ParseObject, calldata));
+            if(verbosity >= 1 && H5Fget_obj_count(fh, H5F_OBJ_ALL) > 1)
+            {
+              CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                         "Leaked %d HDF5 objects when parsing file '%s'.", (int)H5Fget_obj_count(fh, H5F_OBJ_ALL) - 1, full_fn);
+            }
+          }
+          else
+          {
+            for(patch_t *patch = file->patches ;
+                patch != NULL ;
+                patch = patch->next)
+            {
+              HandleDataset(fh, patch, cctkGH);
+            }
           }
           CHECK_ERROR (H5Fclose (fh));
 
@@ -718,6 +812,33 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
   ReadInterpolate_CheckAllPointsSet(cctkGH);
 
   free(varsread), varsread = NULL;
+}
+
+
+// scheduled routine, free cache data once done (can be ~GB I think)
+void ReadInterpolate_FreeCache(CCTK_ARGUMENTS)
+{
+  DECLARE_CCTK_PARAMETERS;
+
+  if(verbosity >= 3)
+    CCTK_VInfo(CCTK_THORNSTRING, "Freeing dataset cache");
+
+  for(file_t *file = filecache, *next_file = NULL ;
+      file != NULL ;
+      next_file = file->next, free(file), file = next_file)
+  {
+    free(file->filename);
+    file->filename = NULL;
+    for(patch_t *patch = file->patches, *next_patch = NULL;
+        patch != NULL ;
+        next_patch = patch->next, free(patch), patch = next_patch)
+    {
+      free(patch->patchname);
+      patch->patchname = NULL;
+    }
+    file->patches = NULL;
+  }
+  filecache = NULL;
 }
 
 

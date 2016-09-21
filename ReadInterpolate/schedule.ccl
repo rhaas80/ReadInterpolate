@@ -28,6 +28,12 @@ schedule ReadInterpolate_InterpolateInTime IN ReadInterpolate_ReadData AFTER Rea
   OPTIONS: level
 } "Interpolate in datasets in time for past timelevels"
 
+schedule ReadInterpolate_FreeCache IN CCTK_POSTPOSTINITIAL
+{
+  LANG: C
+  OPTIONS: global
+} "Free memory used for dataset caches"
+
 if(enforce_symmetries_after_reading) {
   schedule ReadInterpolate_EnforceSymmetry IN ReadInterpolate_ReadData AFTER ReadInterpolate_Read
   {
