@@ -401,6 +401,12 @@ extern "C" void ReadInterpolate_InterpolateInTime(CCTK_ARGUMENTS)
 {
   DECLARE_CCTK_PARAMETERS;
 
+  // RH: HACK I know that Carpet calls the ID routines such that tl=0 is last
+  // and so I know that once rl=0 runs I am done.
+  const int current_timelevel = GetTimeLevel(cctkGH);
+  if(current_timelevel > 0)
+    return;
+
   for(varseenmap::const_iterator it = varseen.begin(), end = varseen.end() ;
       it != end ;
       it++) {

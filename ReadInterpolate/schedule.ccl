@@ -22,8 +22,11 @@ schedule ReadInterpolate_Read IN ReadInterpolate_ReadData
   # TODO: allocate temp storage here
 } "Read in datasets"
 
-# TODO: add routine for time interpolation after all data has been read (this
-# needs tohappen before any prolongation happens)!
+schedule ReadInterpolate_InterpolateInTime IN ReadInterpolate_ReadData AFTER ReadInterpolate_Read BEFORE ReadInterpolate_EnforceSymmetry
+{
+  LANG: C
+  OPTIONS: level
+} "Interpolate in datasets in time for past timelevels"
 
 if(enforce_symmetries_after_reading) {
   schedule ReadInterpolate_EnforceSymmetry IN ReadInterpolate_ReadData AFTER ReadInterpolate_Read
