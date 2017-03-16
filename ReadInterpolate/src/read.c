@@ -201,6 +201,16 @@ static int get_nioprocs(const cGH * cctkGH, const char *basename)
   read_int_attr(metadata, "nioprocs", 1, &retval);
 
   CHECK_ERROR (H5Gclose (metadata));
+  ssize_t open_objects;
+  CHECK_ERROR (open_objects = H5Fget_obj_count (file,
+                                                H5F_OBJ_ALL | H5F_OBJ_LOCAL));
+  if(open_objects != 1) {
+    char buf[1024];
+    CHECK_ERROR(H5Fget_name (file, buf, sizeof(buf)));
+    CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+               "There are %d open objects in file %s", (int)open_objects-1,
+               buf);
+  }
   CHECK_ERROR (H5Fclose (file));
 
   return retval;
@@ -753,6 +763,16 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
               HandleDataset(fh, patch, cctkGH);
             }
           }
+          ssize_t open_objects;
+          CHECK_ERROR (open_objects =
+            H5Fget_obj_count (fh, H5F_OBJ_ALL | H5F_OBJ_LOCAL));
+          if(open_objects != 1) {
+            char buf[1024];
+            CHECK_ERROR(H5Fget_name (fh, buf, sizeof(buf)));
+            CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                       "There are %d open objects in file %s",
+                       (int)open_objects-1, buf);
+          }
           CHECK_ERROR (H5Fclose (fh));
 
           free((void*)full_fn);
@@ -823,6 +843,8 @@ void ReadInterpolate_FreeCache(CCTK_ARGUMENTS)
   if(verbosity >= 3)
     CCTK_VInfo(CCTK_THORNSTRING, "Freeing dataset cache");
 
+  CCTK_DisableGroupStorage(cctkGH, "ReadInterpolate::timeread");
+
   for(file_t *file = filecache, *next_file = NULL ;
       file != NULL ;
       next_file = file->next, free(file), file = next_file)
@@ -839,6 +861,50 @@ void ReadInterpolate_FreeCache(CCTK_ARGUMENTS)
     file->patches = NULL;
   }
   filecache = NULL;
+
+  ssize_t open_objects;
+  const unsigned int types = H5F_OBJ_ALL;
+  CHECK_ERROR (open_objects = H5Fget_obj_count (H5F_OBJ_ALL, types));
+  if(open_objects != 0) {
+    hid_t objs[100]; // if there's more than 100 leaked object we are lost
+    ssize_t got_objs;
+    CHECK_ERROR(got_objs = H5Fget_obj_ids (H5F_OBJ_ALL, types,
+                                sizeof(objs)/sizeof(objs[0]), objs));
+
+    CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+               "There are %d (%d) open objects in application",
+               (int)open_objects, (int)got_objs);
+    for(int i = 0 ; i < open_objects ; i++) {
+      char buf[1024] = "<anonymous>";
+      H5I_type_t type;
+      static const struct typename_t {
+        const char *name;
+        H5I_type_t type;
+      } typenames[] = {
+        {"FILE", H5I_FILE},
+        {"GROUP", H5I_GROUP},
+        {"DATATYPE", H5I_DATATYPE},
+        {"DATASPACE", H5I_DATASPACE},
+        {"DATASET", H5I_DATASET},
+        {"ATTR", H5I_ATTR},
+        {"BADID", H5I_BADID},
+      };
+      H5E_BEGIN_TRY {
+      H5Iget_name(objs[i], buf, sizeof(buf));
+      } H5E_END_TRY; // memory only types fail if one queries for their name
+      CHECK_ERROR(type = H5Iget_type(objs[i]));
+      for(size_t t = 0 ; t < sizeof(typenames)/sizeof(typenames[0]) ; t++) {
+        if(type == typenames[t].type) {
+          CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                     "object name: %s type: %s", buf,
+                     typenames[t].name);
+        }
+      }
+    }
+  }
+
+  // force close HDF5 library (and all open files)
+  CHECK_ERROR (H5close());
 }
 
 
