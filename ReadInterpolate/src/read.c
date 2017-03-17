@@ -74,6 +74,7 @@ struct pulldata
 static int regexmatchedsomething[MAX_N_REGEX];
 static int * varsread = NULL;
 static file_t * filecache = NULL;
+static ssize_t open_objects_on_entry = -1;
 
 /********************************************************************
  ********************* Other Routine Prototypes *********************
@@ -673,6 +674,9 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
   DECLARE_CCTK_PARAMETERS;
   DECLARE_CCTK_ARGUMENTS;
 
+  if(open_objects_on_entry < 0)
+    CHECK_ERROR(open_objects_on_entry =
+                  H5Fget_obj_count(H5F_OBJ_ALL, H5F_OBJ_ALL));
 
   varsread = calloc(CCTK_NumVars(), sizeof(*varsread));
   assert(varsread);
@@ -845,15 +849,15 @@ void ReadInterpolate_FreeCache(CCTK_ARGUMENTS)
   ssize_t open_objects;
   const unsigned int types = H5F_OBJ_ALL;
   CHECK_ERROR (open_objects = H5Fget_obj_count (H5F_OBJ_ALL, types));
-  if(open_objects != 0) {
+  if(open_objects != open_objects_on_entry) {
     hid_t objs[100]; // if there's more than 100 leaked object we are lost
     ssize_t got_objs;
     CHECK_ERROR(got_objs = H5Fget_obj_ids (H5F_OBJ_ALL, types,
                                 sizeof(objs)/sizeof(objs[0]), objs));
 
     CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-               "There are %d (%d) open objects in application",
-               (int)open_objects, (int)got_objs);
+               "There are %d open objects in application which is %d more than when ReadInterpolate started",
+               (int)open_objects, (int)(open_objects - open_objects_on_entry));
     for(int i = 0 ; i < open_objects ; i++) {
       char buf[1024] = "<anonymous>";
       H5I_type_t type;
@@ -883,8 +887,7 @@ void ReadInterpolate_FreeCache(CCTK_ARGUMENTS)
     }
   }
 
-  // force close HDF5 library (and all open files)
-  CHECK_ERROR (H5close());
+  CHECK_ERROR (H5garbage_collect());
 }
 
 
