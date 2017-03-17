@@ -19,7 +19,7 @@ schedule ReadInterpolate_Read IN ReadInterpolate_ReadData
 {
   LANG: C
   OPTIONS: level
-  # TODO: allocate temp storage here
+  STORAGE: reflevelseen interpthispoint interp_coords
 } "Read in datasets"
 
 schedule ReadInterpolate_InterpolateInTime IN ReadInterpolate_ReadData AFTER ReadInterpolate_Read BEFORE ReadInterpolate_EnforceSymmetry

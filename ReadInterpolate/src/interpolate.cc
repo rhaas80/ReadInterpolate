@@ -139,16 +139,6 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
     return; // NOTREACHED
   }
 
-  // free storage for temp workspace
-  const int timelevels = 0; // number of timelevels for out temp. variables
-  const int group = CCTK_GroupIndex(CCTK_THORNSTRING "::reflevelseen");
-  int ierr = CCTK_GroupStorageDecrease(cctkGH, 1, &group, &timelevels, NULL);
-  if(ierr < 0)
-  {
-    CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-               "Could not deallocate storage for '%s', error = %d",
-               CCTK_THORNSTRING "::reflevelseen", ierr);
-  }
   varseen.clear();
 }
 
@@ -161,17 +151,6 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
                                  CCTK_REAL const * const vardata, void *token)
 {
   DECLARE_CCTK_PARAMETERS;
-
-  // make sure there is storage for temp workspace
-  const int timelevels = 1; // number of timelevels for out temp. variables
-  const int group = CCTK_GroupIndex(CCTK_THORNSTRING "::reflevelseen");
-  int ierr = CCTK_GroupStorageIncrease(cctkGH, 1, &group, &timelevels, NULL);
-  if(ierr < 0)
-  {
-    CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-               "Could not allocate storage for '%s', error = %d",
-               CCTK_THORNSTRING "::reflevelseen", ierr);
-  }
 
   // keep track of temporary storage associated with each variable
   if(!varseen.count(varindex)) {

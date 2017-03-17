@@ -673,26 +673,6 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
   DECLARE_CCTK_PARAMETERS;
   DECLARE_CCTK_ARGUMENTS;
 
-  const char * groups[] = {
-    CCTK_THORNSTRING "::interpthispoint",
-    CCTK_THORNSTRING "::interp_coords",
-  };
-
-  // allocate storage for temp workspace
-  {
-    for(int i = 0 ; i < DIM(groups) ; i++)
-    {
-      const int timelevels = 1; // number of timelevels for out temp. variables
-      const int group = CCTK_GroupIndex(groups[i]);
-      int ierr = CCTK_GroupStorageIncrease(cctkGH, 1, &group, &timelevels, NULL);
-      if(ierr < 0)
-      {
-        CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                   "Could not allocate storage for '%s', error = %d",
-                   groups[i], ierr);
-      }
-    }
-  }
 
   varsread = calloc(CCTK_NumVars(), sizeof(*varsread));
   assert(varsread);
