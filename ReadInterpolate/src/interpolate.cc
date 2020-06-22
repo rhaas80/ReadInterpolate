@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdio.h> 
 #include <stdlib.h>
 #include <string.h>
@@ -79,12 +80,9 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
                           CCTK_THORNSTRING "::reflevelseen[0]"));
         assert(myreflevelseen);
         myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
-        assert(cctk_lsh[0] == cctk_ash[0]);
-        assert(cctk_lsh[1] == cctk_ash[1]);
-        assert(cctk_lsh[2] == cctk_ash[2]);
 
-        for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
-        {
+        CCTK_LOOP3_ALL(ReadInterpolate_CountPoints, cctkGH, i,j,k) {
+          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
           if(myreflevelseen[idx] == -1)
           {
             if(nunset_points_var == 0)
@@ -98,7 +96,7 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
               free(varname);
             }
           }
-        }
+        } CCTK_ENDLOOP3_ALL(ReadInterpolate_CountPoints);
 
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
@@ -194,9 +192,6 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
         assert(myreflevelseen);
         myreflevelseen += varseen[varindex] * cctk_ash[0] * cctk_ash[1] *
                           cctk_ash[2];
-        assert(cctk_lsh[0] == cctk_ash[0]);
-        assert(cctk_lsh[1] == cctk_ash[1]);
-        assert(cctk_lsh[2] == cctk_ash[2]);
 
         CCTK_REAL *xyz[3] = {x,y,z};
         // region for which we have enough inner and ghost points to interpolate,
@@ -253,8 +248,8 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
         // check for overlap and interpolate
         size_t npoints = 0;
 
-        for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
-        {
+        CCTK_LOOP3_ALL(ReadInterpolate_MarkPoints, cctkGH, i,j,k) {
+          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
           CCTK_REAL xL = x[idx], yL = y[idx], zL = z[idx];
           if(undo_rot90)
           {
@@ -284,7 +279,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
           }
           else
             interpthispoint[idx] = 0;
-        }
+        } CCTK_ENDLOOP3_ALL(ReadInterpolate_MarkPoints);
 
         if(verbosity >= 5-(npoints>0))
         {
@@ -299,23 +294,25 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
           DoInterpolate(npoints, interp_x, interp_y, interp_z, 
                         lsh, origin, delta, vardata, interp_data);
 
-          for(int idx = cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2]-1 ; idx >= 0 ; --idx)
-          {
+          size_t point = 0;
+          CCTK_LOOP3_ALL(ReadInterpolate_CopyData, cctkGH, i,j,k) {
+            ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
             if(interpthispoint[idx])
             {
-              npoints -= 1; // push/pop logic, must be before access
-              outvardata[idx] = interp_data[npoints];
+              outvardata[idx] = interp_data[point];
               myreflevelseen[idx] = reflevel;
               timeread[idx] = time;
-              if(verbosity >= 10 || (verbosity >= 9 && npoints % (1 + npoints / 10) == 0))
+              if(verbosity >= 10 || (verbosity >= 9 && point % (1 + point / 10) == 0))
               {
                 CCTK_VInfo(CCTK_THORNSTRING, "received value %g for point (%g,%g,%g) source level %d source time %g",
                            outvardata[idx], x[idx],y[idx],z[idx], reflevel, time);
               }
+              npoints -= 1;
+              point += 1;
             }
-          }
+          } CCTK_ENDLOOP3_ALL(ReadInterpolate_CopyData);
+          assert(npoints == 0);
         }
-        assert(npoints == 0);
 
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
@@ -411,11 +408,9 @@ extern "C" void ReadInterpolate_InterpolateInTime(CCTK_ARGUMENTS)
         for(int tl = 0 ; tl < vtl ; ++tl)
           vardata[tl] = static_cast<CCTK_REAL*>(
             CCTK_VarDataPtrI(cctkGH, tl, varindex));
-        assert(cctk_lsh[0] == cctk_ash[0]);
-        assert(cctk_lsh[1] == cctk_ash[1]);
-        assert(cctk_lsh[2] == cctk_ash[2]);
 
-        for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++) {
+        CCTK_LOOP3_ALL(ReadInterpolate_InterpInTime, cctkGH, i,j,k) {
+          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
           // TODO" don't hardcode size of timesread
           CCTK_REAL data[3];
           CCTK_REAL times[3];
@@ -427,7 +422,7 @@ extern "C" void ReadInterpolate_InterpolateInTime(CCTK_ARGUMENTS)
             vardata[tl][idx] = lagrange_interp(tl, data, times,
                                                cctk_time - tl*CCTK_DELTA_TIME);
           }
-        }
+        } CCTK_ENDLOOP3_ALL(ReadInterpolate_InterpInTime);
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
   //}
@@ -455,12 +450,11 @@ static void ClearRefLevelSeen(const cGH * cctkGH, const int var)
                           CCTK_THORNSTRING "::reflevelseen[0]"));
         assert(myreflevelseen);
         myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
-        assert(cctk_lsh[0] == cctk_ash[0]);
-        assert(cctk_lsh[1] == cctk_ash[1]);
-        assert(cctk_lsh[2] == cctk_ash[2]);
 
-        for(int idx = 0 ; idx < cctk_lsh[0]*cctk_lsh[1]*cctk_lsh[2] ; idx++)
+        CCTK_LOOP3_ALL(ReadInterpolate_ClearPoints, cctkGH, i,j,k) {
+          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
           myreflevelseen[idx] = -1;
+        } CCTK_ENDLOOP3_ALL(ReadInterpolate_ClearPoints);
 
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
