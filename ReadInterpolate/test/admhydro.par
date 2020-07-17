@@ -94,7 +94,7 @@ ADMBase::initial_dtlapse = "zero"
 ADMBase::initial_dtshift = "zero"
 HydroBase::initial_hydro = "zero"
 
-IO::filereader_ID_dir = "../../../arrangements/Zelmani/ReadInterpolate/test/tov_write"
+IO::filereader_ID_dir = "../../../arrangements/EinsteinInitialData/ReadInterpolate/test/tov_write"
 #IO::filereader_ID_dir = "tov_write"
 ReadInterpolate::files = "alp rho"
 ReadInterpolate::max_number_of_read_variables = 2
