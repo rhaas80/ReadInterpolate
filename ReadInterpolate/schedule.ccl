@@ -1,7 +1,5 @@
 # Schedule definitions for thorn ReadInterpolate
 
-# TODO: make this variable and control from  code
-STORAGE: timeread[3]
 
 if(CCTK_EQUALS(test, "generate") || CCTK_EQUALS(test, "compare")) {
   STORAGE: test_values[3]
@@ -25,14 +23,8 @@ schedule ReadInterpolate_Read IN ReadInterpolate_ReadData
 {
   LANG: C
   OPTIONS: level
-  STORAGE: reflevelseen interpthispoint interp_coords
+  STORAGE: reflevelseen[3] interpthispoint interp_coords timeread[3]
 } "Read in datasets"
-
-schedule ReadInterpolate_InterpolateInTime IN ReadInterpolate_ReadData AFTER ReadInterpolate_Read BEFORE ReadInterpolate_EnforceSymmetry
-{
-  LANG: C
-  OPTIONS: level
-} "Interpolate in datasets in time for past timelevels"
 
 schedule ReadInterpolate_FreeCache IN CCTK_POSTPOSTINITIAL
 {

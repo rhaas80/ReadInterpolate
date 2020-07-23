@@ -75,28 +75,31 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
         DECLARE_CCTK_ARGUMENTS;
-        CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
-          CCTK_VarDataPtr(cctkGH, 0,
-                          CCTK_THORNSTRING "::reflevelseen[0]"));
-        assert(myreflevelseen);
-        myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
 
-        CCTK_LOOP3_ALL(ReadInterpolate_CountPoints, cctkGH, i,j,k) {
-          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
-          if(myreflevelseen[idx] == -1)
-          {
-            if(nunset_points_var == 0)
-              nunset_vars += 1;
-            nunset_points_var += 1;
-            if(verbosity >= 8)
+        for(int tl = 0 ; tl < (read_only_timelevel_0 ? 1 : 3) ; tl++) {
+          CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
+            CCTK_VarDataPtr(cctkGH, tl,
+                            CCTK_THORNSTRING "::reflevelseen[0]"));
+          assert(myreflevelseen);
+          myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
+
+          CCTK_LOOP3_ALL(ReadInterpolate_CountPoints, cctkGH, i,j,k) {
+            ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
+            if(myreflevelseen[idx] == -1)
             {
-              char *varname = CCTK_FullName(varindex);
-              CCTK_VInfo(CCTK_THORNSTRING, "Point (%g,%g,%g) on target level %d was not set for variable '%s'",
-                         x[idx],y[idx],z[idx], Carpet::reflevel, varname);
-              free(varname);
+              if(nunset_points_var == 0)
+                nunset_vars += 1;
+              nunset_points_var += 1;
+              if(verbosity >= 8)
+              {
+                char *varname = CCTK_FullName(varindex);
+                CCTK_VInfo(CCTK_THORNSTRING, "Point (%g,%g,%g) on target level %d time level %d was not set for variable '%s'",
+                           x[idx],y[idx],z[idx], Carpet::reflevel, tl, varname);
+                free(varname);
+              }
             }
-          }
-        } CCTK_ENDLOOP3_ALL(ReadInterpolate_CountPoints);
+          } CCTK_ENDLOOP3_ALL(ReadInterpolate_CountPoints);
+        }
 
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
@@ -136,7 +139,12 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
                nunset_points, nunset_vars);
     return; // NOTREACHED
   }
+}
 
+// check that all target points have been set to something
+extern "C"
+void ReadInterpolate_ClearAllPointsSet(void)
+{
   varseen.clear();
 }
 
@@ -165,7 +173,13 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
     return;
 
   const int current_reflevel = GetRefinementLevel(cctkGH);
-  const int current_timelevel = GetTimeLevel(cctkGH);
+  const int timelevels = CCTK_ActiveTimeLevelsVI(cctkGH, varindex);
+
+  assert(!read_only_timelevel_0 || timelevel == 0);
+
+  if(timelevel >= timelevels)
+    return;
+
   // for tl != 0 the different rl are not aligned in time so we will do time
   // interpolation later
   // this leaves the question which times to use if multiple rl overlap a given
@@ -178,20 +192,33 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
   // when decreasing resoluition)
   // TODO: possibly actually use the grid spacing (delta) to decide this,
   // spacing in time is hard to come by in the HDF5 files
-  if(reflevel > current_reflevel && current_timelevel != 0)
+  if(reflevel > current_reflevel && timelevel != 0)
     return;
+
+  if(verbosity >= 3) {
+    CCTK_VInfo(CCTK_THORNSTRING, "Interpolating '%s it=%d tl=%d rl=%d c=%d' in space",
+               CCTK_FullVarName(varindex), iteration, timelevel, reflevel,
+               component);
+  }
+
+  assert(timelevel < (read_only_timelevel_0 ? 1 : 3));
 
   //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
         DECLARE_CCTK_ARGUMENTS;
+
         CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
-          CCTK_VarDataPtr(cctkGH, 0,
+          CCTK_VarDataPtr(cctkGH, timelevel,
                           CCTK_THORNSTRING "::reflevelseen[0]"));
         assert(myreflevelseen);
         myreflevelseen += varseen[varindex] * cctk_ash[0] * cctk_ash[1] *
                           cctk_ash[2];
+
+        CCTK_REAL *mytimeread = static_cast<CCTK_REAL*>(
+          CCTK_VarDataPtr(cctkGH, timelevel, CCTK_THORNSTRING "::timeread"));
+        assert(mytimeread);
 
         CCTK_REAL *xyz[3] = {x,y,z};
         // region for which we have enough inner and ghost points to interpolate,
@@ -301,7 +328,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
             {
               outvardata[idx] = interp_data[point];
               myreflevelseen[idx] = reflevel;
-              timeread[idx] = time;
+              mytimeread[idx] = time;
               if(verbosity >= 10 || (verbosity >= 9 && point % (1 + point / 10) == 0))
               {
                 CCTK_VInfo(CCTK_THORNSTRING, "received value %g for point (%g,%g,%g) source level %d source time %g",
@@ -377,11 +404,7 @@ extern "C" void ReadInterpolate_InterpolateInTime(CCTK_ARGUMENTS)
 {
   DECLARE_CCTK_PARAMETERS;
 
-  // RH: HACK I know that Carpet calls the ID routines such that tl=0 is last
-  // and so I know that once rl=0 runs I am done.
-  const int current_timelevel = GetTimeLevel(cctkGH);
-  if(current_timelevel > 0)
-    return;
+  assert(!read_only_timelevel_0);
 
   for(varseenmap::const_iterator it = varseen.begin(), end = varseen.end() ;
       it != end ;
@@ -395,17 +418,23 @@ extern "C" void ReadInterpolate_InterpolateInTime(CCTK_ARGUMENTS)
     if(var >= max_number_of_read_variables)
       continue;
 
+    if(verbosity >= 2) {
+      CCTK_VInfo(CCTK_THORNSTRING, "Interpolating variable '%s' in time",
+                 CCTK_FullVarName(varindex));
+    }
+
   //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
         DECLARE_CCTK_ARGUMENTS;
-        int vtl = CCTK_ActiveTimeLevelsVI(cctkGH, varindex);
+
+        const int timelevels = CCTK_ActiveTimeLevelsVI(cctkGH, varindex);
         // TODO: don't hardcode this to the size of timeread
-        assert(vtl <= 3); // size of timesread
+        assert(timelevels <= 3); // size of timesread
         CCTK_REAL *vardata[3];
         CCTK_REAL *timesread[3] = {timeread, timeread_p, timeread_p_p};
-        for(int tl = 0 ; tl < vtl ; ++tl)
+        for(int tl = 0 ; tl < timelevels ; ++tl)
           vardata[tl] = static_cast<CCTK_REAL*>(
             CCTK_VarDataPtrI(cctkGH, tl, varindex));
 
@@ -414,12 +443,12 @@ extern "C" void ReadInterpolate_InterpolateInTime(CCTK_ARGUMENTS)
           // TODO" don't hardcode size of timesread
           CCTK_REAL data[3];
           CCTK_REAL times[3];
-          for(int tl = 0 ; tl < vtl ; ++tl) {
+          for(int tl = 0 ; tl < timelevels ; ++tl) {
             data[tl] = vardata[tl][idx];
             times[tl] = timesread[tl][idx];
           }
-          for(int tl = 0 ; tl < vtl ; ++tl) {
-            vardata[tl][idx] = lagrange_interp(tl, data, times,
+          for(int tl = 0 ; tl < timelevels ; ++tl) {
+            vardata[tl][idx] = lagrange_interp(timelevels, data, times,
                                                cctk_time - tl*CCTK_DELTA_TIME);
           }
         } CCTK_ENDLOOP3_ALL(ReadInterpolate_InterpInTime);
@@ -445,16 +474,19 @@ static void ClearRefLevelSeen(const cGH * cctkGH, const int var)
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
         DECLARE_CCTK_ARGUMENTS;
-        CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
-          CCTK_VarDataPtr(cctkGH, 0,
-                          CCTK_THORNSTRING "::reflevelseen[0]"));
-        assert(myreflevelseen);
-        myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
 
-        CCTK_LOOP3_ALL(ReadInterpolate_ClearPoints, cctkGH, i,j,k) {
-          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
-          myreflevelseen[idx] = -1;
-        } CCTK_ENDLOOP3_ALL(ReadInterpolate_ClearPoints);
+        for(int tl = 0 ; tl < (read_only_timelevel_0 ? 1 : 3) ; tl++) {
+          CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
+            CCTK_VarDataPtr(cctkGH, tl,
+                            CCTK_THORNSTRING "::reflevelseen[0]"));
+          assert(myreflevelseen);
+          myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
+
+          CCTK_LOOP3_ALL(ReadInterpolate_ClearPoints, cctkGH, i,j,k) {
+            ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
+            myreflevelseen[idx] = -1;
+          } CCTK_ENDLOOP3_ALL(ReadInterpolate_ClearPoints);
+        }
 
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;

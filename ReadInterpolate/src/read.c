@@ -98,7 +98,7 @@ static char *trim(char *s);
 static herr_t ParseObject (hid_t from, const char *objectname, void *calldata);
 static patch_t *RecordGFPatch(hid_t from, const char *objectname);
 static void HandleDataset(hid_t from, const patch_t *patch, cGH *cctkGH);
-static int UseThisDataset(const patch_t *patch, const int current_timelevel);
+static int UseThisDataset(const patch_t *patch, const cGH *cctkGH);
 static int ParseDatasetNameTags(const char *objectsname, char *varname, 
                                 int *iteration, int *timelevel, int *map,
                                 int *reflevel, int *component);
@@ -516,20 +516,22 @@ static patch_t *RecordGFPatch(hid_t from, const char *objectname)
 // * the user specified given regex
 // * the list of existing Cactus variables
 // TODO: move into function of its own
-static int UseThisDataset(const patch_t *patch, const int current_timelevel)
+static int UseThisDataset(const patch_t *patch, const cGH *cctkGH)
 {
   DECLARE_CCTK_PARAMETERS;
 
   int retval = 0;
 
   const int matches_regex = MatchDatasetAgainstRegex(patch->patchname);
-  const int use_this_timelevel = read_only_timelevel_0 ?
-                                 patch->timelevel == 0 :
-                                 current_timelevel == patch->timelevel;
+
+  const int timelevels = CCTK_ActiveTimeLevelsVI(cctkGH, patch->vindex);
+  const int use_this_timelevel =
+    (!read_only_timelevel_0 && patch->timelevel < timelevels) ||
+    patch->timelevel == 0;
   if(verbosity >= 4)
   {
-    CCTK_VInfo(CCTK_THORNSTRING, "Tested that '%s' should be read for timelevel %d: %s",
-               patch->patchname, current_timelevel,
+    CCTK_VInfo(CCTK_THORNSTRING, "Tested that '%s' should be read for as one of %d timelevels: %s",
+               patch->patchname, timelevels,
                use_this_timelevel ? "yes" : "no");
   }
 
@@ -572,13 +574,12 @@ static void HandleDataset(hid_t from, const patch_t *patch, cGH *cctkGH)
 {
   DECLARE_CCTK_PARAMETERS;
 
-  const int current_timelevel = GetTimeLevel(cctkGH);
   CCTK_REAL * vardata;
 
   if(verbosity >= 3)
     CCTK_VInfo(CCTK_THORNSTRING, "Checking out dataset '%s'", patch->patchname);
 
-  if(UseThisDataset(patch, current_timelevel))
+  if(UseThisDataset(patch, cctkGH))
   {
     struct pulldata pd;
 
@@ -815,6 +816,9 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
   // warn if any variable was not completely set
   ReadInterpolate_CheckAllPointsSet(cctkGH);
 
+  if(!read_only_timelevel_0)
+    ReadInterpolate_InterpolateInTime(CCTK_PASS_CTOC);
+
   free(varsread), varsread = NULL;
 }
 
@@ -888,6 +892,8 @@ void ReadInterpolate_FreeCache(CCTK_ARGUMENTS)
   }
 
   CHECK_ERROR (H5garbage_collect());
+
+  ReadInterpolate_ClearAllPointsSet();
 }
 
 
