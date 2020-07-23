@@ -11,6 +11,9 @@ CCTK_REAL interp_coords TYPE=gf TAGS='Checkpoint="no" Prolongation="none"'
   interp_x, interp_y, interp_z, interp_data
 } "coordinate arrays for the interpolator"
 
+CCTK_REAL test_values TIMELEVELS=3 TYPE=gf TAGS='Checkpoint="yes" ProlongationOperator="none"' "store values for test"
+CCTK_REAL test_results TIMELEVELS=1 TYPE=gf TAGS='Checkpoint="no" ProlongationOperator="none"' "difference values for test"
+
 #########################################
 ###  Aliased functions from Boundary  ###
 #########################################

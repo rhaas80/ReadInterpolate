@@ -1,0 +1,62 @@
+!DESC "Carpet, artificial data, write" 
+ActiveThorns = "time coordbase symbase cartgrid3d ioutil boundary Carpet CarpetLib CarpetRegrid2 AEILocalInterp CarpetInterp CarpetReduce CarpetIOScalar CarpetIOBasic LoopControl InitBase carpetiohdf5 readinterpolate"
+
+# use fixed timestep so that I can read all 3 timelevels when changing resolutions
+time::timestep_method = "given"
+time::timestep = 0.5
+
+CartGrid3D::type = "coordbase"
+CoordBase::domainsize = minmax
+
+Carpet::domain_from_coordbase = "yes"
+# add 4 coarse points to allow for interpolator stencil when reading
+CoordBase::xmin =  -2.00 - 0.314 - 4*0.4
+CoordBase::ymin =  -2.00 + 4.2   - 4*0.4
+CoordBase::zmin =  -2.25 + 0.6   - 4*0.25
+CoordBase::xmax =   2.00 - 0.314 + 4*0.4
+CoordBase::ymax =   2.00 + 4.2   + 4*0.4
+CoordBase::zmax =   2.25 + 0.6   + 4*0.25
+CoordBase::dx = 0.4
+CoordBase::dy = 0.4
+CoordBase::dz = 0.25
+CoordBase::boundary_size_x_lower = 3
+CoordBase::boundary_size_y_lower = 3
+CoordBase::boundary_size_z_lower = 3
+CoordBase::boundary_size_x_upper = 3
+CoordBase::boundary_size_y_upper = 3
+CoordBase::boundary_size_z_upper = 3
+
+Carpet::max_refinement_levels = 2
+CarpetRegrid2::min_distance = 0
+CarpetRegrid2::num_centres = 1
+CarpetRegrid2::num_levels_1 = 2
+CarpetRegrid2::position_x_1 = -0.314
+CarpetRegrid2::position_y_1 = +4.2
+CarpetRegrid2::position_z_1 = +0.6
+# add 4 coarse points to allow for interpolator stencil when reading
+CarpetRegrid2::radius_1[1] = 0.75 + 4*0.4/2.
+
+driver::ghost_size   = 3
+
+Carpet::prolongation_order_space  = 5
+Carpet::prolongation_order_time   = 2
+
+cactus::cctk_itlast   = 0
+
+Carpet::init_each_timelevel = "yes"
+InitBase::initial_data_setup_method = "init_single_level"
+
+readinterpolate::test = "generate"
+
+IO::out_dir = "synthetic_write"
+IO::out_fileinfo = "none"
+IO::parfile_write = "no"
+
+IOScalar::outScalar_every = 0
+IOScalar::outScalar_vars  = "readinterpolate::test_results"
+IOScalar::outScalar_reductions  = "minimum maximum norm1 norm2"
+
+CarpetIOHDF5::checkpoint = "yes"
+IO::checkpoint_ID = "yes"
+IO::checkpoint_dir = "synthetic_write"
+IO::recover = "no"

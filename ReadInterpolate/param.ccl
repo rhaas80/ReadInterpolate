@@ -113,6 +113,13 @@ INT verbosity "how much diagnostic output to produce"
   2:* :: "more and more detailed debug output (values up to 10 are defined. 10 is very verbose.)"
 } 1
 
+keyword test "control how test data is used"
+{
+  "no" :: "do not use test data"
+  "generate" :: "generate test data"
+  "compare" :: "compare read data to test data"
+} "no"
+
 SHARES: IO
 
 USES STRING filereader_ID_dir

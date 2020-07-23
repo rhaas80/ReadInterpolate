@@ -5,6 +5,7 @@ SRCS = \
   interpolate.cc \
   paramcheck.c \
   read.c \
+  test.c \
   $(NULL)
 
 # Subdirectories containing source files
