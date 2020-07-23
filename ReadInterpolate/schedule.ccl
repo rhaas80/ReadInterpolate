@@ -3,15 +3,21 @@
 # TODO: make this variable and control from  code
 STORAGE: timeread[3]
 
+if(CCTK_EQUALS(test, "generate") || CCTK_EQUALS(test, "compare")) {
+  STORAGE: test_values[3]
+}
+
 schedule ReadInterpolate_ParamCheck in CCTK_PARAMCHECK
 {
   LANG: C
   OPTIONS: global
 } "Sanity check given parameters"
 
-schedule GROUP ReadInterpolate_ReadData IN CCTK_INITIAL AFTER ADMBase_InitialData AFTER HydroBase_Initial BEFORE ADMBase_PostInitial BEFORE HydroBase_Prim2ConInitial
-{
-} "Read in datasets from disk"
+if(CCTK_EQUALS(test, "no") || CCTK_EQUALS(test, "compare")) {
+  schedule GROUP ReadInterpolate_ReadData IN CCTK_INITIAL AFTER ADMBase_InitialData AFTER HydroBase_Initial BEFORE ADMBase_PostInitial BEFORE HydroBase_Prim2ConInitial
+  {
+  } "Read in datasets from disk"
+}
 
 # need to schedule late apparently for CartGrid3d to finish setting up the
 # coordinates (I think)
@@ -44,4 +50,18 @@ if(enforce_symmetries_after_reading) {
   schedule group ApplyBCs AS ReadInterpolate_ApplyBCs IN ReadInterpolate_ReadData AFTER ReadInterpolate_EnforceSymmetry
   {
   } "Apply symmetry conditions to read in variables"
+}
+
+if(CCTK_EQUALS(test, "generate")) {
+  schedule ReadInterpolate_GenerateTestData IN CCTK_INITIAL
+  {
+    LANG: C
+  } "Generate polynomial test data"
+}
+
+if(CCTK_EQUALS(test, "compare")) {
+  schedule ReadInterpolate_CompareTestData IN CCTK_POSTPOSTINITIAL
+  {
+    LANG: C
+  } "Compare to polynomial test data"
 }
