@@ -42,8 +42,6 @@ static varseenmap varseen;
  ********************************************************************/
 
 static void ClearRefLevelSeen(const cGH * cctkGH, const int var);
-static CCTK_REAL lagrange_interp(const int sz, CCTK_REAL const data[],
-                                 CCTK_REAL const times[], CCTK_REAL const t);
 
 /********************************************************************
  *********************     External Routines   **********************
@@ -162,23 +160,6 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
       ClearRefLevelSeen(cctkGH, varseen[varindex]);
   }
   if(varseen[varindex] >= max_number_of_read_variables)
-    return;
-
-  const int current_reflevel = GetRefinementLevel(cctkGH);
-  const int current_timelevel = GetTimeLevel(cctkGH);
-  // for tl != 0 the different rl are not aligned in time so we will do time
-  // interpolation later
-  // this leaves the question which times to use if multiple rl overlap a given
-  // grid point. This code will use only data from coarser (only in the sense
-  // of having a smaller refinement factor, not necessarily having a coarser
-  // resolution) since I expect the change in resolution when readin in data to
-  // be moderate so that the tripplet of timelevels from the same reflevel has
-  // a decent chance of covering a good fraction of the new times needed (all
-  // of them for increased resolution, at least some so reducing extrapolation
-  // when decreasing resoluition)
-  // TODO: possibly actually use the grid spacing (delta) to decide this,
-  // spacing in time is hard to come by in the HDF5 files
-  if(reflevel > current_reflevel && current_timelevel != 0)
     return;
 
   //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
@@ -301,7 +282,6 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
             {
               outvardata[idx] = interp_data[point];
               myreflevelseen[idx] = reflevel;
-              timeread[idx] = time;
               if(verbosity >= 10 || (verbosity >= 9 && point % (1 + point / 10) == 0))
               {
                 CCTK_VInfo(CCTK_THORNSTRING, "received value %g for point (%g,%g,%g) source level %d source time %g",
@@ -368,67 +348,6 @@ static void DoInterpolate(size_t npoints,
   Util_TableDestroy(param_table_handle);
 }
 
-// after we have read data into each timelevel, since times of the different
-// timelevels may differ between the datasets and the simulation, we here
-// interpolate in time so that all data is on the correct times
-// This needs to be done affter all data has been read, but before any
-// prolongation or restriction happens
-extern "C" void ReadInterpolate_InterpolateInTime(CCTK_ARGUMENTS)
-{
-  DECLARE_CCTK_PARAMETERS;
-
-  // RH: HACK I know that Carpet calls the ID routines such that tl=0 is last
-  // and so I know that once rl=0 runs I am done.
-  const int current_timelevel = GetTimeLevel(cctkGH);
-  if(current_timelevel > 0)
-    return;
-
-  for(varseenmap::const_iterator it = varseen.begin(), end = varseen.end() ;
-      it != end ;
-      it++) {
-    const int varindex = it->first;
-    const int var = it->second;
-
-    // when more variables are requested than I have buffer space, I ignore the
-    // extra ones but abort and inform the user after parsing the files what
-    // the correct number would have been
-    if(var >= max_number_of_read_variables)
-      continue;
-
-  //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
-    BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
-      BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
-
-        DECLARE_CCTK_ARGUMENTS;
-        int vtl = CCTK_ActiveTimeLevelsVI(cctkGH, varindex);
-        // TODO: don't hardcode this to the size of timeread
-        assert(vtl <= 3); // size of timesread
-        CCTK_REAL *vardata[3];
-        CCTK_REAL *timesread[3] = {timeread, timeread_p, timeread_p_p};
-        for(int tl = 0 ; tl < vtl ; ++tl)
-          vardata[tl] = static_cast<CCTK_REAL*>(
-            CCTK_VarDataPtrI(cctkGH, tl, varindex));
-
-        CCTK_LOOP3_ALL(ReadInterpolate_InterpInTime, cctkGH, i,j,k) {
-          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
-          // TODO" don't hardcode size of timesread
-          CCTK_REAL data[3];
-          CCTK_REAL times[3];
-          for(int tl = 0 ; tl < vtl ; ++tl) {
-            data[tl] = vardata[tl][idx];
-            times[tl] = timesread[tl][idx];
-          }
-          for(int tl = 0 ; tl < vtl ; ++tl) {
-            vardata[tl][idx] = lagrange_interp(tl, data, times,
-                                               cctk_time - tl*CCTK_DELTA_TIME);
-          }
-        } CCTK_ENDLOOP3_ALL(ReadInterpolate_InterpInTime);
-      } END_LOCAL_COMPONENT_LOOP;
-    } END_LOCAL_MAP_LOOP;
-  //}
-  }
-}
-
 /********************************************************************
  *********************     Internal Routines   **********************
  ********************************************************************/
@@ -459,24 +378,4 @@ static void ClearRefLevelSeen(const cGH * cctkGH, const int var)
       } END_LOCAL_COMPONENT_LOOP;
     } END_LOCAL_MAP_LOOP;
   //} END_REFLEVEL_LOOP;
-}
-
-// this evaluates the Lagrange interpolating polynomial of order sz-1 for x,y
-// pairs times and data a the location t
-// this is probably not numerically stable but given that I expect at most sz
-// == 3 I don't really mind
-static CCTK_REAL lagrange_interp(const int sz, CCTK_REAL const data[],
-                                 CCTK_REAL const times[], CCTK_REAL const t)
-{
-  CCTK_REAL retval = 0.;
-  for(int i = 0 ; i < sz ; ++i) {
-    CCTK_REAL pij = data[i];
-    for(int j = 0 ; j < sz ; ++j) {
-      if(j == i)
-        continue;
-      pij *= (times[j] - t)/(times[j] - times[i]);
-    }
-    retval += pij;
-  }
-  return retval;
 }
