@@ -38,9 +38,6 @@ Carpet::max_refinement_levels = 2
 CarpetRegrid2::min_distance = 0
 CarpetRegrid2::num_centres = 1
 CarpetRegrid2::num_levels_1 = 2
-CarpetRegrid2::center_1_x[1] = -3.14
-CarpetRegrid2::center_1_y[1] = +42
-CarpetRegrid2::center_1_z[1] = +6
 CarpetRegrid2::radius_1[1] = 7.5
 
 driver::ghost_size   = 2
