@@ -67,7 +67,6 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
     if(var >= max_number_of_read_variables)
       continue;
 
-  //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
     int nunset_points_var = 0;
     BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
       BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
@@ -107,7 +106,6 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
       free(varname);
     }
     nunset_points += nunset_points_var;
-  //} END_REFLEVEL_LOOP;
   }
 
   if(int(varseen.size()) > max_number_of_read_variables)
@@ -162,132 +160,130 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
   if(varseen[varindex] >= max_number_of_read_variables)
     return;
 
-  //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
-    BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
-      BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
+  BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
+    BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
-        DECLARE_CCTK_ARGUMENTS;
-        CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
-          CCTK_VarDataPtr(cctkGH, 0,
-                          CCTK_THORNSTRING "::reflevelseen[0]"));
-        assert(myreflevelseen);
-        myreflevelseen += varseen[varindex] * cctk_ash[0] * cctk_ash[1] *
-                          cctk_ash[2];
+      DECLARE_CCTK_ARGUMENTS;
+      CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
+        CCTK_VarDataPtr(cctkGH, 0,
+                        CCTK_THORNSTRING "::reflevelseen[0]"));
+      assert(myreflevelseen);
+      myreflevelseen += varseen[varindex] * cctk_ash[0] * cctk_ash[1] *
+                        cctk_ash[2];
 
-        CCTK_REAL *xyz[3] = {x,y,z};
-        // region for which we have enough inner and ghost points to interpolate,
-        // assuming the interpolator needs nghostzones ghosts
-        // we allow usage of one sided interpolation at outer boundaries and
-        // symmetry boundaries, where we have no other choice
-        // NOTE: this will give unexpected results should the read in data
-        // happen to have a component end at the outer boundary of the new
-        // domain and then have further components further out. In this case
-        // the value the is interpolated depends on the order in which the
-        // datasets appear in the file. The HDF5 files have cctk_bbox attribute
-        // however I suspect it to not be trustworthy once we start merging
-        // files or use the slicer to get data out of files.
-        int nghostzones[6];
-        for(int i = 0 ; i < 6 ; i++) {
-          if(interpolator_half_width == -1)
-            nghostzones[i] = cctk_nghostzones[i];
-          else
-            nghostzones[i] = interpolator_half_width;
-        }
-        int require_ghosts[6];
-        for(int d = 0 ; d < 3 ; d++) { // allow one side interpolation if read in patch covers outer boundary
-          int ijk[3] = {0,0,0};
-          ijk[d] = cctk_lsh[d]-1;
-          CCTK_REAL xyzmin = xyz[d][CCTK_GFINDEX3D(cctkGH, 0,0,0)];
-          CCTK_REAL xyzmax = xyz[d][CCTK_GFINDEX3D(cctkGH, ijk[0],ijk[1],ijk[2])];
-          require_ghosts[2*d+0] = !(origin[d] <= xyzmin && cctk_bbox[2*d+0]);
-          require_ghosts[2*d+1] = !(origin[d]+(lsh[d]-1)*delta[d] >= xyzmax && cctk_bbox[2*d+1]);
-        }
-        CCTK_REAL xmin[3] = {origin[0]+require_ghosts[0]*(nghostzones[0]-1)*delta[0],
-                             origin[1]+require_ghosts[2]*(nghostzones[1]-1)*delta[1],
-                             origin[2]+require_ghosts[4]*(nghostzones[2]-1)*delta[2]};
-        CCTK_REAL xmax[3] = {origin[0]+(lsh[0]-1-require_ghosts[1]*(nghostzones[0]-1))*delta[0],
-                             origin[1]+(lsh[1]-1-require_ghosts[3]*(nghostzones[1]-1))*delta[1],
-                             origin[2]+(lsh[2]-1-require_ghosts[5]*(nghostzones[2]-1))*delta[2]};
+      CCTK_REAL *xyz[3] = {x,y,z};
+      // region for which we have enough inner and ghost points to interpolate,
+      // assuming the interpolator needs nghostzones ghosts
+      // we allow usage of one sided interpolation at outer boundaries and
+      // symmetry boundaries, where we have no other choice
+      // NOTE: this will give unexpected results should the read in data
+      // happen to have a component end at the outer boundary of the new
+      // domain and then have further components further out. In this case
+      // the value the is interpolated depends on the order in which the
+      // datasets appear in the file. The HDF5 files have cctk_bbox attribute
+      // however I suspect it to not be trustworthy once we start merging
+      // files or use the slicer to get data out of files.
+      int nghostzones[6];
+      for(int i = 0 ; i < 6 ; i++) {
+        if(interpolator_half_width == -1)
+          nghostzones[i] = cctk_nghostzones[i];
+        else
+          nghostzones[i] = interpolator_half_width;
+      }
+      int require_ghosts[6];
+      for(int d = 0 ; d < 3 ; d++) { // allow one side interpolation if read in patch covers outer boundary
+        int ijk[3] = {0,0,0};
+        ijk[d] = cctk_lsh[d]-1;
+        CCTK_REAL xyzmin = xyz[d][CCTK_GFINDEX3D(cctkGH, 0,0,0)];
+        CCTK_REAL xyzmax = xyz[d][CCTK_GFINDEX3D(cctkGH, ijk[0],ijk[1],ijk[2])];
+        require_ghosts[2*d+0] = !(origin[d] <= xyzmin && cctk_bbox[2*d+0]);
+        require_ghosts[2*d+1] = !(origin[d]+(lsh[d]-1)*delta[d] >= xyzmax && cctk_bbox[2*d+1]);
+      }
+      CCTK_REAL xmin[3] = {origin[0]+require_ghosts[0]*(nghostzones[0]-1)*delta[0],
+                           origin[1]+require_ghosts[2]*(nghostzones[1]-1)*delta[1],
+                           origin[2]+require_ghosts[4]*(nghostzones[2]-1)*delta[2]};
+      CCTK_REAL xmax[3] = {origin[0]+(lsh[0]-1-require_ghosts[1]*(nghostzones[0]-1))*delta[0],
+                           origin[1]+(lsh[1]-1-require_ghosts[3]*(nghostzones[1]-1))*delta[1],
+                           origin[2]+(lsh[2]-1-require_ghosts[5]*(nghostzones[2]-1))*delta[2]};
 
-        CCTK_REAL * outvardata;  // pointer to output variable data
-       
-        outvardata = static_cast<CCTK_REAL*>(CCTK_VarDataPtrI(cctkGH, 0, varindex));
-        if(outvardata == NULL)
+      CCTK_REAL * outvardata;  // pointer to output variable data
+     
+      outvardata = static_cast<CCTK_REAL*>(CCTK_VarDataPtrI(cctkGH, 0, varindex));
+      if(outvardata == NULL)
+      {
+        CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                   "Requested variable '%s' does not have storage.",
+                   CCTK_VarName(varindex));
+        return; // NOTREACHED
+      }
+
+      if(verbosity >= 6)
+      {
+        CCTK_VInfo(CCTK_THORNSTRING, "checking for overlap against (%g,%g,%g)-(%g,%g,%g)",
+                   xmin[0],xmin[1],xmin[2], xmax[0],xmax[1],xmax[2]);
+      }
+
+      // check for overlap and interpolate
+      size_t npoints = 0;
+
+      CCTK_LOOP3_ALL(ReadInterpolate_MarkPoints, cctkGH, i,j,k) {
+        ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
+        CCTK_REAL xL = x[idx], yL = y[idx], zL = z[idx];
+
+        if(myreflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
+           xmin[0]-epsilon <= xL && xL-epsilon <= xmax[0] &&
+           xmin[1]-epsilon <= yL && yL-epsilon <= xmax[1] &&
+           xmin[2]-epsilon <= zL && zL-epsilon <= xmax[2])
         {
-          CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                     "Requested variable '%s' does not have storage.",
-                     CCTK_VarName(varindex));
-          return; // NOTREACHED
-        }
-
-        if(verbosity >= 6)
-        {
-          CCTK_VInfo(CCTK_THORNSTRING, "checking for overlap against (%g,%g,%g)-(%g,%g,%g)",
-                     xmin[0],xmin[1],xmin[2], xmax[0],xmax[1],xmax[2]);
-        }
-
-        // check for overlap and interpolate
-        size_t npoints = 0;
-
-        CCTK_LOOP3_ALL(ReadInterpolate_MarkPoints, cctkGH, i,j,k) {
-          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
-          CCTK_REAL xL = x[idx], yL = y[idx], zL = z[idx];
-
-          if(myreflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
-             xmin[0]-epsilon <= xL && xL-epsilon <= xmax[0] &&
-             xmin[1]-epsilon <= yL && yL-epsilon <= xmax[1] &&
-             xmin[2]-epsilon <= zL && zL-epsilon <= xmax[2])
+          interp_x[npoints] = xL;
+          interp_y[npoints] = yL;
+          interp_z[npoints] = zL;
+          interpthispoint[idx] = 1; // record that we need this point
+          npoints += 1;
+          if(verbosity >= 10 || (verbosity >= 9 && npoints % (1 + npoints / 10) == 0))
           {
-            interp_x[npoints] = xL;
-            interp_y[npoints] = yL;
-            interp_z[npoints] = zL;
-            interpthispoint[idx] = 1; // record that we need this point
-            npoints += 1;
-            if(verbosity >= 10 || (verbosity >= 9 && npoints % (1 + npoints / 10) == 0))
-            {
-              CCTK_VInfo(CCTK_THORNSTRING, "setting up interpolation for point %d (%g,%g,%g) source level %d",
-                         (int)npoints, x[idx],y[idx],z[idx], reflevel);
-            }
+            CCTK_VInfo(CCTK_THORNSTRING, "setting up interpolation for point %d (%g,%g,%g) source level %d",
+                       (int)npoints, x[idx],y[idx],z[idx], reflevel);
           }
-          else
-            interpthispoint[idx] = 0;
-        } CCTK_ENDLOOP3_ALL(ReadInterpolate_MarkPoints);
-
-        if(verbosity >= 5-(npoints>0))
-        {
-          CCTK_VInfo(CCTK_THORNSTRING, "found overlap and %d not-yet-seen points on source level %d on destination level %d for variable %s",
-                     (int)npoints, reflevel, Carpet::reflevel, CCTK_VarName(varindex));
         }
+        else
+          interpthispoint[idx] = 0;
+      } CCTK_ENDLOOP3_ALL(ReadInterpolate_MarkPoints);
 
-        if(npoints > 0)
-        {
-          // ask for delayed read to be performed now that we know we need data
-          ReadInterpolate_PullData(token);
-          DoInterpolate(npoints, interp_x, interp_y, interp_z, 
-                        lsh, origin, delta, vardata, interp_data);
+      if(verbosity >= 5-(npoints>0))
+      {
+        CCTK_VInfo(CCTK_THORNSTRING, "found overlap and %d not-yet-seen points on source level %d on destination level %d for variable %s",
+                   (int)npoints, reflevel, Carpet::reflevel, CCTK_VarName(varindex));
+      }
 
-          size_t point = 0;
-          CCTK_LOOP3_ALL(ReadInterpolate_CopyData, cctkGH, i,j,k) {
-            ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
-            if(interpthispoint[idx])
+      if(npoints > 0)
+      {
+        // ask for delayed read to be performed now that we know we need data
+        ReadInterpolate_PullData(token);
+        DoInterpolate(npoints, interp_x, interp_y, interp_z, 
+                      lsh, origin, delta, vardata, interp_data);
+
+        size_t point = 0;
+        CCTK_LOOP3_ALL(ReadInterpolate_CopyData, cctkGH, i,j,k) {
+          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
+          if(interpthispoint[idx])
+          {
+            outvardata[idx] = interp_data[point];
+            myreflevelseen[idx] = reflevel;
+            if(verbosity >= 10 || (verbosity >= 9 && point % (1 + point / 10) == 0))
             {
-              outvardata[idx] = interp_data[point];
-              myreflevelseen[idx] = reflevel;
-              if(verbosity >= 10 || (verbosity >= 9 && point % (1 + point / 10) == 0))
-              {
-                CCTK_VInfo(CCTK_THORNSTRING, "received value %g for point (%g,%g,%g) source level %d source time %g",
-                           outvardata[idx], x[idx],y[idx],z[idx], reflevel, time);
-              }
-              npoints -= 1;
-              point += 1;
+              CCTK_VInfo(CCTK_THORNSTRING, "received value %g for point (%g,%g,%g) source level %d source time %g",
+                         outvardata[idx], x[idx],y[idx],z[idx], reflevel, time);
             }
-          } CCTK_ENDLOOP3_ALL(ReadInterpolate_CopyData);
-          assert(npoints == 0);
-        }
+            npoints -= 1;
+            point += 1;
+          }
+        } CCTK_ENDLOOP3_ALL(ReadInterpolate_CopyData);
+        assert(npoints == 0);
+      }
 
-      } END_LOCAL_COMPONENT_LOOP;
-    } END_LOCAL_MAP_LOOP;
-  //} END_REFLEVEL_LOOP;
+    } END_LOCAL_COMPONENT_LOOP;
+  } END_LOCAL_MAP_LOOP;
 }
 
 static void DoInterpolate(size_t npoints, 
@@ -350,23 +346,21 @@ static void ClearRefLevelSeen(const cGH * cctkGH, const int var)
 
   assert(var < max_number_of_read_variables);
 
-  //BEGIN_REFLEVEL_LOOP(cctkGH) { // we run in level mode to look more like an ordinary id thorn
-    BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
-      BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
+  BEGIN_LOCAL_MAP_LOOP (cctkGH, CCTK_GF) {
+    BEGIN_LOCAL_COMPONENT_LOOP (cctkGH, CCTK_GF) {
 
-        DECLARE_CCTK_ARGUMENTS;
-        CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
-          CCTK_VarDataPtr(cctkGH, 0,
-                          CCTK_THORNSTRING "::reflevelseen[0]"));
-        assert(myreflevelseen);
-        myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
+      DECLARE_CCTK_ARGUMENTS;
+      CCTK_INT *myreflevelseen = static_cast<CCTK_INT*>(
+        CCTK_VarDataPtr(cctkGH, 0,
+                        CCTK_THORNSTRING "::reflevelseen[0]"));
+      assert(myreflevelseen);
+      myreflevelseen += var * cctk_ash[0] * cctk_ash[1] * cctk_ash[2];
 
-        CCTK_LOOP3_ALL(ReadInterpolate_ClearPoints, cctkGH, i,j,k) {
-          ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
-          myreflevelseen[idx] = -1;
-        } CCTK_ENDLOOP3_ALL(ReadInterpolate_ClearPoints);
+      CCTK_LOOP3_ALL(ReadInterpolate_ClearPoints, cctkGH, i,j,k) {
+        ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
+        myreflevelseen[idx] = -1;
+      } CCTK_ENDLOOP3_ALL(ReadInterpolate_ClearPoints);
 
-      } END_LOCAL_COMPONENT_LOOP;
-    } END_LOCAL_MAP_LOOP;
-  //} END_REFLEVEL_LOOP;
+    } END_LOCAL_COMPONENT_LOOP;
+  } END_LOCAL_MAP_LOOP;
 }
