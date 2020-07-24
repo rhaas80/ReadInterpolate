@@ -232,15 +232,6 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
         CCTK_LOOP3_ALL(ReadInterpolate_MarkPoints, cctkGH, i,j,k) {
           ptrdiff_t idx = CCTK_GFINDEX3D(cctkGH, i,j,k);
           CCTK_REAL xL = x[idx], yL = y[idx], zL = z[idx];
-          if(undo_rot90)
-          {
-            while(xL < 0 || yL < 0) // 90 degree rotation
-            {
-              CCTK_REAL tmp = yL;
-              yL = -xL;
-              xL = tmp;
-            }
-          }
 
           if(myreflevelseen[idx] <= reflevel && // need <= since we re-use the same level information for all output grid functions
              xmin[0]-epsilon <= xL && xL-epsilon <= xmax[0] &&
