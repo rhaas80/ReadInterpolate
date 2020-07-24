@@ -54,56 +54,54 @@ void ReadInterpolate_ParamCheck(CCTK_ARGUMENTS)
 
   // check that each of the given regular expressions matches at least one
   // Cactus grid function
+  char * dataset_regex = strdup(only_these_datasets), *scratchptr;
+  assert(dataset_regex);
+
+  int allmatched = 1;
+  for(const char *regex = trim(strtok_r(dataset_regex, ",", &scratchptr)) ;
+      regex != NULL ;
+      regex = trim(strtok_r(NULL, ",", &scratchptr)))
   {
-    char * dataset_regex = strdup(only_these_datasets), *scratchptr;
-    assert(dataset_regex);
-
-    int allmatched = 1;
-    for(const char *regex = trim(strtok_r(dataset_regex, ",", &scratchptr)) ;
-        regex != NULL ;
-        regex = trim(strtok_r(NULL, ",", &scratchptr)))
+    int any_matched = 0;
+    const int num_vars = CCTK_NumVars();
+    for(int i = 0 ; i < num_vars ; i++)
     {
-      int any_matched = 0;
-      const int num_vars = CCTK_NumVars();
-      for(int i = 0 ; i < num_vars ; i++)
+      char *varname = CCTK_FullName(i);
+      assert(varname);
+
+      regmatch_t pmatch[8];
+      const int matched = CCTK_RegexMatch(varname, regex, DIM(pmatch), pmatch);
+
+      free(varname);
+
+      if(matched > 0)
       {
-        char *varname = CCTK_FullName(i);
-        assert(varname);
-
-        regmatch_t pmatch[8];
-        const int matched = CCTK_RegexMatch(varname, regex, DIM(pmatch), pmatch);
-
-        free(varname);
-
-        if(matched > 0)
-        {
-          any_matched = 1;
-          break;
-        }
-        else if(matched < 0)
-        {
-          CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                     "Invalid regular expression '%s': does not compile", regex);
-          // NOTREACHED
-        }
+        any_matched = 1;
+        break;
       }
-
-      if(!any_matched) // never matched
+      else if(matched < 0)
       {
-        allmatched = 0;
-        CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                   "Regular expresion '%s' did not match anything.",
-                   regex);
+        CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+                   "Invalid regular expression '%s': does not compile", regex);
+        // NOTREACHED
       }
     }
 
-    free(dataset_regex);
-
-    if(!allmatched)
+    if(!any_matched) // never matched
     {
-      CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                 "Some regular expresion(s) did not match any Cactus variable.");
-      return; // NOTREACHED
+      allmatched = 0;
+      CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+                 "Regular expresion '%s' did not match anything.",
+                 regex);
     }
+  }
+
+  free(dataset_regex);
+
+  if(!allmatched)
+  {
+    CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
+               "Some regular expresion(s) did not match any Cactus variable.");
+    return; // NOTREACHED
   }
 }
