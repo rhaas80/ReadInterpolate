@@ -88,7 +88,7 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
             if(verbosity >= 8)
             {
               char *varname = CCTK_FullName(varindex);
-              CCTK_VInfo(CCTK_THORNSTRING, "Point (%g,%g,%g) on target level %d was not set for variable '%s'",
+              CCTK_VINFO("Point (%g,%g,%g) on target level %d was not set for variable '%s'",
                          x[idx],y[idx],z[idx], Carpet::reflevel, varname);
               free(varname);
             }
@@ -100,7 +100,7 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
     if(nunset_points_var > 0 && verbosity > 1)
     {
       char *varname = CCTK_FullName(varindex);
-      CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+      CCTK_VWARN(CCTK_WARN_ALERT,
                  "There were %d points that could not be set on target level %d for variable '%s'.",
                  nunset_points_var, Carpet::reflevel, varname);
       free(varname);
@@ -119,17 +119,15 @@ void ReadInterpolate_CheckAllPointsSet(const cGH * cctkGH)
       if(var >= max_number_of_read_variables)
         buf << " " << CCTK_FullVarName(varindex);
     }
-    CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
-               "Not enough scratch space was allocated to record what was read. max_number_of_read_variables was set to %d but at least %d variables were read. The variables that could not be read properly are:%s.",
+    CCTK_VERROR("Not enough scratch space was allocated to record what was read. max_number_of_read_variables was set to %d but at least %d variables were read. The variables that could not be read properly are:%s.",
                max_number_of_read_variables, int(varseen.size()), buf.str().c_str());
     return; // NOTREACHED
   }
 
   if(nunset_points > 0)
   {
-    CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
-               "There were %d points in %d variables that could not be set.",
-               nunset_points, nunset_vars);
+    CCTK_VERROR("There were %d points in %d variables that could not be set.",
+                nunset_points, nunset_vars);
     return; // NOTREACHED
   }
 
@@ -211,15 +209,14 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
       outvardata = static_cast<CCTK_REAL*>(CCTK_VarDataPtrI(cctkGH, 0, varindex));
       if(outvardata == NULL)
       {
-        CCTK_VWarn(CCTK_WARN_ABORT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                   "Requested variable '%s' does not have storage.",
-                   CCTK_VarName(varindex));
+        CCTK_VERROR("Requested variable '%s' does not have storage.",
+                    CCTK_FullVarName(varindex));
         return; // NOTREACHED
       }
 
       if(verbosity >= 6)
       {
-        CCTK_VInfo(CCTK_THORNSTRING, "checking for overlap against (%g,%g,%g)-(%g,%g,%g)",
+        CCTK_VINFO("checking for overlap against (%g,%g,%g)-(%g,%g,%g)",
                    xmin[0],xmin[1],xmin[2], xmax[0],xmax[1],xmax[2]);
       }
 
@@ -242,7 +239,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
           npoints += 1;
           if(verbosity >= 10 || (verbosity >= 9 && npoints % (1 + npoints / 10) == 0))
           {
-            CCTK_VInfo(CCTK_THORNSTRING, "setting up interpolation for point %d (%g,%g,%g) source level %d",
+            CCTK_VINFO("setting up interpolation for point %d (%g,%g,%g) source level %d",
                        (int)npoints, x[idx],y[idx],z[idx], reflevel);
           }
         }
@@ -252,7 +249,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
 
       if(verbosity >= 5-(npoints>0))
       {
-        CCTK_VInfo(CCTK_THORNSTRING, "found overlap and %d not-yet-seen points on source level %d on destination level %d for variable %s",
+        CCTK_VINFO("found overlap and %d not-yet-seen points on source level %d on destination level %d for variable %s",
                    (int)npoints, reflevel, Carpet::reflevel, CCTK_VarName(varindex));
       }
 
@@ -272,7 +269,7 @@ void ReadInterpolate_Interpolate(const cGH * cctkGH, int iteration,
             myreflevelseen[idx] = reflevel;
             if(verbosity >= 10 || (verbosity >= 9 && point % (1 + point / 10) == 0))
             {
-              CCTK_VInfo(CCTK_THORNSTRING, "received value %g for point (%g,%g,%g) source level %d source time %g",
+              CCTK_VINFO("received value %g for point (%g,%g,%g) source level %d source time %g",
                          outvardata[idx], x[idx],y[idx],z[idx], reflevel, time);
             }
             npoints -= 1;

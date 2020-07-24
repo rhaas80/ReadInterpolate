@@ -81,16 +81,14 @@ void ReadInterpolate_ParamCheck(CCTK_ARGUMENTS)
       }
       else if(matched < 0)
       {
-        CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                   "Invalid regular expression '%s': does not compile", regex);
-        // NOTREACHED
+        CCTK_VERROR("Invalid regular expression '%s': does not compile", regex);
       }
     }
 
     if(!any_matched) // never matched
     {
       allmatched = 0;
-      CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+      CCTK_VWARN(CCTK_WARN_ALERT,
                  "Regular expresion '%s' did not match anything.",
                  regex);
     }
@@ -100,8 +98,6 @@ void ReadInterpolate_ParamCheck(CCTK_ARGUMENTS)
 
   if(!allmatched)
   {
-    CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-               "Some regular expresion(s) did not match any Cactus variable.");
-    return; // NOTREACHED
+    CCTK_VERROR("Some regular expresion(s) did not match any Cactus variable.");
   }
 }

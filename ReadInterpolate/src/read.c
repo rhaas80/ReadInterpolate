@@ -110,19 +110,18 @@ static int MatchDatasetAgainstRegex(const char *objectname);
 /*****************************************************************************/
 /* macro to do an HDF5 call, check its return code, and print a warning
    in case of an error */
-#define CHECK_ERROR(hdf5_call)                                                \
-          do                                                                  \
-          {                                                                   \
-            int _error_code = hdf5_call;                                      \
-                                                                              \
-                                                                              \
-            if (_error_code < 0)                                              \
-            {                                                                 \
-              CCTK_VError (__LINE__, __FILE__, CCTK_THORNSTRING,\
-                               "WARNING: line %d: HDF5 call '%s' returned "   \
-                               "error code %d\n",                             \
-                                __LINE__, #hdf5_call, _error_code);           \
-            }                                                                 \
+#define CHECK_ERROR(hdf5_call)                                            \
+          do                                                              \
+          {                                                               \
+            int _error_code = hdf5_call;                                  \
+                                                                          \
+                                                                          \
+            if (_error_code < 0)                                          \
+            {                                                             \
+              CCTK_VERROR ("WARNING: line %d: HDF5 call '%s' returned "   \
+                           "error code %d\n",                             \
+                            __LINE__, #hdf5_call, _error_code);           \
+            }                                                             \
           } while (0)
 
 #define DIM(x) ((int)(sizeof(x)/sizeof(x[0])))
@@ -182,15 +181,15 @@ static int get_nioprocs(const cGH * cctkGH, const char *basename)
   // return if no valid checkpoint could be found otherwise just free the
   // memory for the filenames
   if (file < 0) {
-    CCTK_VWarn (CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                "No valid HDF5 file with basename \"%s/%s\" found", 
-                filereader_ID_dir, basename);
+    CCTK_VWARN(CCTK_WARN_ALERT,
+               "No valid HDF5 file with basename \"%s/%s\" found",
+               filereader_ID_dir, basename);
   }
   for (int i = 0 ; i < nfilenames ; i++)
   {
     if (file < 0) {
-      CCTK_VWarn (CCTK_WARN_PICKY, __LINE__, __FILE__, CCTK_THORNSTRING,
-                  "Tried filename \"%s\"", filenames[i]);
+      CCTK_VWARN(CCTK_WARN_PICKY,
+                 "Tried filename \"%s\"", filenames[i]);
     }
     free((void*)filenames[i]);
     filenames[i]=NULL;
@@ -209,7 +208,7 @@ static int get_nioprocs(const cGH * cctkGH, const char *basename)
   if(open_objects != 1) {
     char buf[1024];
     CHECK_ERROR(H5Fget_name (file, buf, sizeof(buf)));
-    CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+    CCTK_VWARN(CCTK_WARN_ALERT,
                "There are %d open objects in file %s", (int)open_objects-1,
                buf);
   }
@@ -290,8 +289,8 @@ static int ParseDatasetNameTags(const char *objectname, char *varname,
         *tagvals[i].val = 0;
       if(verbosity >= 5)
       {
-        CCTK_VInfo(CCTK_THORNSTRING, "Testing dataset name coda '%s' against tag '%s': found %smatch and will use value %d",
-                    coda, tagvals[i].tag, didmatch?"":"no ", *tagvals[i].val);
+        CCTK_VINFO("Testing dataset name coda '%s' against tag '%s': found %smatch and will use value %d",
+                   coda, tagvals[i].tag, didmatch?"":"no ", *tagvals[i].val);
       }
     }
     retval = (objectname[offset] == '\0'); // was there any leftover stuff we could not identify?
@@ -343,14 +342,12 @@ static int MatchDatasetAgainstRegex(const char *objectname)
     }
     else if(matched < 0)
     {
-      CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                 "Invalid regular expression '%s': does not compile", regex);
-      // NOTREACHED
+      CCTK_VERROR("Invalid regular expression '%s': does not compile", regex);
     }
   }
   if(verbosity >= 4)
   {
-    CCTK_VInfo(CCTK_THORNSTRING, "Tested dataset '%s' against regex(s) '%s': %smatch",
+    CCTK_VINFO("Tested dataset '%s' against regex(s) '%s': %smatch",
                objectname, only_these_datasets, retval ? "" : "no ");
   }
 
@@ -382,8 +379,7 @@ static patch_t *RecordGFPatch(hid_t from, const char *objectname)
       {
         if(verbosity >= 4)
         {
-          CCTK_VInfo(CCTK_THORNSTRING,
-                     "Tested that '%s' is a known grid function: yes",
+          CCTK_VINFO("Tested that '%s' is a known grid function: yes",
                        objectname);
         }
 
@@ -418,8 +414,7 @@ static patch_t *RecordGFPatch(hid_t from, const char *objectname)
           patch->datatype = H5T_NATIVE_INT;
           typesize = sizeof(CCTK_INT);
         } else {
-          CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                      "Do not know how to handle CCTK type class %d", vartype);
+          CCTK_VERROR("Do not know how to handle CCTK type class %d", vartype);
         }
 
         patch->objectsize = H5Sget_select_npoints (dataspace) * typesize;
@@ -473,17 +468,13 @@ static patch_t *RecordGFPatch(hid_t from, const char *objectname)
             size *= patch->lsh[d];
           }
           if(size*typesize != (int)patch->objectsize) {
-            CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                        "Unexpected size %d bytes of dataset '%s' does not agree "
-                        "with size of CCTK_REAL or CCTK_INT dataset (%d).",
+            CCTK_VERROR("Unexpected size %d bytes of dataset '%s' does not agree with size of CCTK_REAL or CCTK_INT dataset (%d).",
                         (int)patch->objectsize, patch->patchname, size*typesize);
           }
 
           if(verbosity >= 3)
           {
-            CCTK_VInfo(CCTK_THORNSTRING, "Dataset '%s' sizes: origin=(%g,%g,%g), "
-                       "delta=(%g,%g,%g), lsh=(%d,%d,%d), map_is_cartesian=%d, iteration=%d,"
-                       " component=%d, reflevel=%d",
+            CCTK_VINFO("Dataset '%s' sizes: origin=(%g,%g,%g), delta=(%g,%g,%g), lsh=(%d,%d,%d), map_is_cartesian=%d, iteration=%d, component=%d, reflevel=%d",
                        patch->patchname,
                        patch->origin[0],patch->origin[1],patch->origin[2],
                        patch->delta[0],patch->delta[1],patch->delta[2],
@@ -503,7 +494,7 @@ static patch_t *RecordGFPatch(hid_t from, const char *objectname)
     {
       if(verbosity >= 1)
       {
-        CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+        CCTK_VWARN(CCTK_WARN_ALERT,
                    "Objectname '%s' could not be fully parsed.", objectname);
       }
     }
@@ -537,7 +528,7 @@ static int UseThisDataset(const patch_t *patch, const int current_timelevel,
 
   if(verbosity >= 4)
   {
-    CCTK_VInfo(CCTK_THORNSTRING, "Tested that '%s' should be read for timelevel %d ad reflevel %d: %s",
+    CCTK_VINFO("Tested that '%s' should be read for timelevel %d ad reflevel %d: %s",
                patch->patchname, current_timelevel, current_reflevel,
                use_this_timelevel && use_this_reflevel ? "yes" : "no");
   }
@@ -566,7 +557,7 @@ static int UseThisDataset(const patch_t *patch, const int current_timelevel,
     }
     if((verbosity == 1 && !have_warned[patch->vindex]) || verbosity >= 2)
     {
-      CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+      CCTK_VWARN(CCTK_WARN_ALERT,
                  "Skipping integer variable '%s'. Do not know how to interpolate integers.",
                  patch->patchname);
       have_warned[patch->vindex] = 1;
@@ -587,22 +578,20 @@ static void HandleDataset(hid_t from, const patch_t *patch, cGH *cctkGH)
   CCTK_REAL * vardata;
 
   if(verbosity >= 3)
-    CCTK_VInfo(CCTK_THORNSTRING, "Checking out dataset '%s'", patch->patchname);
+    CCTK_VINFO("Checking out dataset '%s'", patch->patchname);
 
   if(UseThisDataset(patch, current_timelevel, current_reflevel))
   {
     struct pulldata pd;
 
     if(verbosity >= 2)
-      CCTK_VInfo(CCTK_THORNSTRING, "Using dataset '%s'", patch->patchname);
+      CCTK_VINFO("Using dataset '%s'", patch->patchname);
 
     vardata = malloc (patch->objectsize);
     if (vardata == NULL)
     {
-      CCTK_VError (__LINE__, __FILE__, CCTK_THORNSTRING,
-                  "failled to allocate %d bytes of memory for %s, giving up",
+      CCTK_VERROR("failled to allocate %d bytes of memory for %s, giving up",
                   (int) patch->objectsize, patch->patchname);
-      return; // NOTREACHED
     }
 
     // we hold of the actual read until really asked for in PullData
@@ -626,7 +615,7 @@ static void HandleDataset(hid_t from, const patch_t *patch, cGH *cctkGH)
   else
   {
     if(verbosity >= 2)
-      CCTK_VInfo(CCTK_THORNSTRING, "Not using dataset '%s' after all.", patch->patchname);
+      CCTK_VINFO("Not using dataset '%s' after all.", patch->patchname);
   }
 }
 
@@ -639,13 +628,13 @@ static herr_t ParseObject (hid_t from, const char *objectname, void *calldata)
   void * cctkGH = ((void**)calldata)[1];
 
   if(verbosity >= 3)
-    CCTK_VInfo(CCTK_THORNSTRING, "Parsing dataset '%s'", objectname);
+    CCTK_VINFO("Parsing dataset '%s'", objectname);
 
   patch_t * patch = RecordGFPatch(from, objectname);
   if(patch != NULL)
   {
     if(verbosity >= 3)
-      CCTK_VInfo(CCTK_THORNSTRING, "Recording dataset '%s'", objectname);
+      CCTK_VINFO("Recording dataset '%s'", objectname);
 
     patch->next = file->patches;
     file->patches = patch;
@@ -669,7 +658,7 @@ void ReadInterpolate_PullData(void * token)
     hid_t dataset;
 
     if(verbosity >= 2)
-      CCTK_VInfo(CCTK_THORNSTRING, "Reading data from dataset '%s'", pd->patch->patchname);
+      CCTK_VINFO("Reading data from dataset '%s'", pd->patch->patchname);
 
     CHECK_ERROR (dataset = H5Dopen (pd->from, pd->patch->patchname));
     CHECK_ERROR (H5Dread (dataset, pd->patch->datatype, H5S_ALL, H5S_ALL,
@@ -705,10 +694,8 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
 
         if(nioprocs < 0)
         {
-          CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                     "Could not open file with basename '%s/%s' to read initial data",
-                     filereader_ID_dir, fn);
-          return; // NOTREACHED
+          CCTK_VERROR("Could not open file with basename '%s/%s' to read initial data",
+                      filereader_ID_dir, fn);
         }
 
         // try to interleave access to the files between all current processors
@@ -722,7 +709,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
                                              FILEREADER_DATA, filenum, nioprocs == 1);
 
           if(verbosity >= 1)
-            CCTK_VInfo(CCTK_THORNSTRING, "Reading datasets from file '%s'", full_fn);
+            CCTK_VINFO("Reading datasets from file '%s'", full_fn);
 
           CHECK_ERROR (fh = H5Fopen (full_fn, H5F_ACC_RDONLY, H5P_DEFAULT));
 
@@ -745,7 +732,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
             CHECK_ERROR (H5Giterate (fh, "/", NULL, ParseObject, calldata));
             if(verbosity >= 1 && H5Fget_obj_count(fh, H5F_OBJ_ALL) > 1)
             {
-              CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+              CCTK_VWARN(CCTK_WARN_ALERT,
                          "Leaked %d HDF5 objects when parsing file '%s'.", (int)H5Fget_obj_count(fh, H5F_OBJ_ALL) - 1, full_fn);
             }
           }
@@ -764,7 +751,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
           if(open_objects != 1) {
             char buf[1024];
             CHECK_ERROR(H5Fget_name (fh, buf, sizeof(buf)));
-            CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+            CCTK_VWARN(CCTK_WARN_ALERT,
                        "There are %d open objects in file %s",
                        (int)open_objects-1, buf);
           }
@@ -791,7 +778,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
       if(!regexmatchedsomething[iregex]) // never matched
       {
         allmatched = 0;
-        CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+        CCTK_VWARN(CCTK_WARN_ALERT,
                    "Regular expresion '%s' did not match anything.",
                    regex);
       }
@@ -801,9 +788,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
 
     if(!allmatched)
     {
-      CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-                 "Some regular expresion(s) did not match anything.");
-      return; // NOTREACHED
+      CCTK_ERROR("Some regular expresion(s) did not match anything.");
     }
   }
 
@@ -817,7 +802,7 @@ void ReadInterpolate_Read(CCTK_ARGUMENTS)
       {
         char * fullname = CCTK_FullName(varindex);
         assert(fullname);
-        CCTK_VInfo(CCTK_THORNSTRING, "Read data for '%s'", fullname);
+        CCTK_VINFO("Read data for '%s'", fullname);
         free(fullname), fullname = NULL;
       }
     }
@@ -836,7 +821,7 @@ void ReadInterpolate_FreeCache(CCTK_ARGUMENTS)
   DECLARE_CCTK_PARAMETERS;
 
   if(verbosity >= 3)
-    CCTK_VInfo(CCTK_THORNSTRING, "Freeing dataset cache");
+    CCTK_VINFO("Freeing dataset cache");
 
   for(file_t *file = filecache, *next_file = NULL ;
       file != NULL ;
@@ -864,7 +849,7 @@ void ReadInterpolate_FreeCache(CCTK_ARGUMENTS)
     CHECK_ERROR(got_objs = H5Fget_obj_ids (H5F_OBJ_ALL, types,
                                 sizeof(objs)/sizeof(objs[0]), objs));
 
-    CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+    CCTK_VWARN(CCTK_WARN_ALERT,
                "There are %d open objects in application which is %d more than when ReadInterpolate started",
                (int)open_objects, (int)(open_objects - open_objects_on_entry));
     for(int i = 0 ; i < open_objects ; i++) {
@@ -888,9 +873,8 @@ void ReadInterpolate_FreeCache(CCTK_ARGUMENTS)
       CHECK_ERROR(type = H5Iget_type(objs[i]));
       for(size_t t = 0 ; t < sizeof(typenames)/sizeof(typenames[0]) ; t++) {
         if(type == typenames[t].type) {
-          CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
-                     "object name: %s type: %s", buf,
-                     typenames[t].name);
+          CCTK_VWARN(CCTK_WARN_ALERT,
+                     "object name: %s type: %s", buf, typenames[t].name);
         }
       }
     }
@@ -927,7 +911,7 @@ void ReadInterpolate_EnforceSymmetry(CCTK_ARGUMENTS)
           failedtoapplysymmetries = 1;
           char * fullname = CCTK_FullName(firstvaringroup+varindex);
           assert(fullname);
-          CCTK_VWarn(CCTK_WARN_ALERT, __LINE__, __FILE__, CCTK_THORNSTRING,
+          CCTK_VWARN(CCTK_WARN_ALERT,
                      "Failed to select symmetry condition for group containing '%s'",
                      fullname);
           free(fullname), fullname = NULL;
@@ -938,8 +922,6 @@ void ReadInterpolate_EnforceSymmetry(CCTK_ARGUMENTS)
   }
   if(failedtoapplysymmetries)
   {
-    CCTK_VError(__LINE__, __FILE__, CCTK_THORNSTRING,
-               "Some symmetry conditions could not be enforced.");
-    return; // NOTREACHED
+    CCTK_VERROR("Some symmetry conditions could not be enforced.");
   }
 }
