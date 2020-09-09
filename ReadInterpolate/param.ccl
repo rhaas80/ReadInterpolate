@@ -41,13 +41,6 @@ INT maximum_reflevel "ignore any datasets with refinement level higher than this
   0:* :: "maximum refinement level to keep"
 } 1000
 
-# checkpoint files contain multiple timelevels which could all be read in if desired
-# this really should be controlled by InitBase::init_all_timelevels (and may be
-# removed in favor of that without warning)
-BOOLEAN read_only_timelevel_0 "read only t=0 from files"
-{
-} "yes"
-
 ## Some Carpet version contain a bug and do not set "origin" correctly for cell
 # centered grids (it is off by half a grid point, ie it does not take the
 # staggering into account). This option fixes this issue by offsetting all

@@ -517,13 +517,10 @@ static int UseThisDataset(const patch_t *patch, const int current_timelevel,
 
   const int matches_regex = MatchDatasetAgainstRegex(patch->patchname);
   // there's no interpolation in time so timelevels must match
-  const int use_this_timelevel = read_only_timelevel_0 ?
-                                 patch->timelevel == 0 :
-                                 current_timelevel == patch->timelevel;
+  const int use_this_timelevel = current_timelevel == patch->timelevel;
   // for tl>0 the reflevels are not aligned in time so one cannot interpolate
   // between reflevels
-  const int use_this_reflevel = read_only_timelevel_0 ||
-                                patch->timelevel == 0 ||
+  const int use_this_reflevel = patch->timelevel == 0 ||
                                 current_reflevel == patch->reflevel;
 
   if(verbosity >= 4)
