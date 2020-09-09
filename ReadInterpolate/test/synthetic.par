@@ -50,7 +50,6 @@ readinterpolate::test = "compare"
 IO::filereader_ID_dir = "../../../arrangements/EinsteinInitialData/ReadInterpolate/test/synthetic_write"
 ReadInterpolate::files = "checkpoint.chkpt.it_0"
 ReadInterpolate::max_number_of_read_variables = 1
-ReadInterpolate::read_only_timelevel_0 = "no"
 ReadInterpolate::interpolator_name = "Lagrange polynomial interpolation"
 ReadInterpolate::interpolator_pars = "
   order=4
