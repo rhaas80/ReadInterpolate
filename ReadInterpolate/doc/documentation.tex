@@ -110,7 +110,7 @@ interpolate the data read in onto the new grid.
 
 \section{Introduction}
 \code{IOUtil}~\cite{EinsteinInitialData_ReadInterpolate_IOUtil} defines a file
-reading interface via the \var{IO} paramters \var{filereader\_ID\_dir},
+reading interface via the \var{IO} parameters \var{filereader\_ID\_dir},
 \var{filereader\_ID\_files}, \var{filereader\_ID\_vars} parameters.
 \code{IOUtil} uses the checkpoint recovery routines to read grid variable data
 from disk.  This requires that the grid resolution used to write the files
@@ -145,7 +145,7 @@ algorithm applies:
 
 \begin{itemize}
 \item unless the candidate datasets overlaps the outer boundary of the
-currrent grid, require that there are at least \var{cctk\_nghostzones} or
+current grid, require that there are at least \var{cctk\_nghostzones} or
 \var{interpolator\_half\_width} extra points for use by the interpolator. This
 may involve using an off-centered interpolation stencil for points near the
 outer boundary. Then
@@ -181,7 +181,7 @@ If desired read in data can be moved to a different position on the grid using
 \var{shift\_read\_datasets\_by[3]} which relocates the origin of the
 coordinates in the read in data to the given coordinate triplet.
 
-\subsection{Special Behaviour}
+\subsection{Special Behavior}
 \code{ReadInterpolate} attempts to avoid one sided interpolation as much as
 possible, yet tried to allow reading in data at the outer boundaries of the
 grid. A heuristic is used to allow one sided derivatives there.  This requires
@@ -209,10 +209,10 @@ centered input data.
 \code{ReadInterpolate} uses \var{interpolator\_name} as the local interpolator
 to interpolate read in data to simulation grid points. It passes
 \var{interpolator\_vars} to the interpolator. The default values select
-\code{AEILocalInterp}'s \texttt{Herminte} interpolator and forbid off centered
+\code{AEILocalInterp}'s \texttt{Hermite} interpolator and forbid off centered
 interpolation stencils or extrapolation.
 
-\code{ReadInterpolate} uses \var{epsilon} as a fuzzyness
+\code{ReadInterpolate} uses \var{epsilon} as a fuzziness
 parameter when determining if a point is contained in a read in dataset. This
 may require changes for very large grids.
 
@@ -223,7 +223,7 @@ specified as \var{interpolator\_half\_width} or alternatively
 assumed to be \var{cctk\_nghostzones} if this parameter is set to \code{-1},
 which is the default.
 
-This makes sure that the interpolator does not  off centre the interpolation
+This makes sure that the interpolator does not  off center the interpolation
 stencil if there are insufficient points to interpolate, which can happen if
 there are insufficient ghost-zones for the interpolation method used, and can
 lead to processor-number dependent results.
@@ -285,7 +285,7 @@ star data produced by
 \code{GRHydro}~\cite{EinsteinInitialData_ReadInterpolate_GRHydro}. It has been
 found useful to in combination with \code{CT\_MultiLevel} since then.
 
-\subsection{Acknowledgements}
+\subsection{Acknowledgments}
 David Radice and Philipp M\"osta provided bug reports and comments during the
 time this thorn was developed.
 
