@@ -149,8 +149,6 @@ currrent grid, require that there are at least \var{cctk\_nghostzones} or
 \var{interpolator\_half\_width} extra points for use by the interpolator. This
 may involve using an off-centered interpolation stencil for points near the
 outer boundary. Then
-\item if \var{read\_only\_timelevel\_0} is true (the default), reject all data
-from time levels other than 0, then
 \item if reading in data from time level 0, pick the largest refinement level
 dataset that contains the point, otherwise pick the refinement level that
 matches the refinement level of the target point. This assumes that the files
@@ -197,7 +195,6 @@ A number of parameters are provided to select which datasets to read:
 than this,
 \item[\code{maximum\_reflevel}] ignore any datasets with refinement level
 higher than this,
-\item{\code{read\_only\_timelevel\_0}} read only $t=0$ from files.
 \end{description}
 
 Some \code{Carpet} version contain a bug and do not set \var{origin} correctly
