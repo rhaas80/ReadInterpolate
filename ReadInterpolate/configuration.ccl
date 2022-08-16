@@ -1,5 +1,3 @@
 # Configuration definitions for thorn ReadInterpolate
 
 REQUIRES HDF5 Carpet IOUtil
-
-REQUIRES THORNS: Carpet IOUtil
